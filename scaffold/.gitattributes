@@ -1,0 +1,2 @@
+# LOG.md is append-only, so concurrent entries merge by keeping both
+LOG.md merge=union
