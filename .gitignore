@@ -1,0 +1,5 @@
+# Built binary
+/zumen
+
+# OS noise
+.DS_Store
