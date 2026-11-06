@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.22', '1.24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - run: go test ./...
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go build -o zumen ./cmd/zumen
+      - run: ./zumen check
+      - run: ./zumen init /tmp/zumen-smoke --no-git
+      - run: test -f /tmp/zumen-smoke/AGENTS.md && test -f /tmp/zumen-smoke/.zumen/settings.json
+      - run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "build left the tree dirty — a generated file is not gitignored:"
+            git status --porcelain
+            exit 1
+          fi
