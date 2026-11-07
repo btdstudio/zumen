@@ -25,7 +25,7 @@ func TestLoadStateReturnsDefaultWhenAbsent(t *testing.T) {
 func TestSaveThenLoadRoundtripsAndStampsUpdatedAt(t *testing.T) {
 	root := t.TempDir()
 	st := DefaultState()
-	if err := SetGate(&st, "requirements", "await-approval", ""); err != nil {
+	if err := SetGate(&st, "spec", "await-approval", ""); err != nil {
 		t.Fatal(err)
 	}
 	st.Sources = []string{"00_intake/1.md"}
@@ -40,7 +40,7 @@ func TestSaveThenLoadRoundtripsAndStampsUpdatedAt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Phase != "requirements" || loaded.Status != "await-approval" {
+	if loaded.Phase != "spec" || loaded.Status != "await-approval" {
 		t.Fatalf("phase/status = %q/%q", loaded.Phase, loaded.Status)
 	}
 	if !reflect.DeepEqual(loaded.Sources, []string{"00_intake/1.md"}) {
@@ -53,13 +53,13 @@ func TestSaveThenLoadRoundtripsAndStampsUpdatedAt(t *testing.T) {
 
 func TestSetGateUpdatesPhaseStatusAndMap(t *testing.T) {
 	st := DefaultState()
-	if err := SetGate(&st, "design", "draft", ""); err != nil {
+	if err := SetGate(&st, "architecture", "draft", ""); err != nil {
 		t.Fatal(err)
 	}
-	if st.Phase != "design" || st.Status != "draft" || st.Gates["design"] != "draft" {
-		t.Fatalf("phase/status/gates.design = %q/%q/%q", st.Phase, st.Status, st.Gates["design"])
+	if st.Phase != "architecture" || st.Status != "draft" || st.Gates["architecture"] != "draft" {
+		t.Fatalf("phase/status/gates.design = %q/%q/%q", st.Phase, st.Status, st.Gates["architecture"])
 	}
-	if st.Gates["intake"] != "" || st.Gates["explore"] != "" || st.Gates["requirements"] != "" || st.Gates["plan"] != "" {
+	if st.Gates["intake"] != "" || st.Gates["explore"] != "" || st.Gates["spec"] != "" || st.Gates["breakdown"] != "" {
 		t.Fatalf("unrelated gates should stay empty, got %+v", st.Gates)
 	}
 }
@@ -69,7 +69,7 @@ func TestSetGateRejectsUnknownPhaseAndStatus(t *testing.T) {
 	if err := SetGate(&st, "bogus", "draft", ""); err == nil || !strings.Contains(err.Error(), "unknown phase") {
 		t.Fatalf("want unknown phase error, got %v", err)
 	}
-	if err := SetGate(&st, "plan", "nope", ""); err == nil || !strings.Contains(err.Error(), "unknown gate status") {
+	if err := SetGate(&st, "breakdown", "nope", ""); err == nil || !strings.Contains(err.Error(), "unknown gate status") {
 		t.Fatalf("want unknown gate status error, got %v", err)
 	}
 }
@@ -81,7 +81,7 @@ func TestSaveStateWritesSlimShapeAndLoadResolves(t *testing.T) {
 
 	a := DefaultState()
 	a.Name = "1-alpha"
-	if err := SetGate(&a, "requirements", "approved", ""); err != nil {
+	if err := SetGate(&a, "spec", "approved", ""); err != nil {
 		t.Fatal(err)
 	}
 	a.Sources = []string{"00_intake/1.md"}
@@ -93,7 +93,7 @@ func TestSaveStateWritesSlimShapeAndLoadResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := SetGate(&b, "design", "draft", ""); err != nil {
+	if err := SetGate(&b, "architecture", "draft", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := SaveState(root, &b); err != nil {
@@ -115,7 +115,7 @@ func TestSaveStateWritesSlimShapeAndLoadResolves(t *testing.T) {
 	if err := json.Unmarshal(raw, &top); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := top["changes"]; !ok || len(top) != 2 || string(top["schema"]) != "1" {
+	if _, ok := top["changes"]; !ok || len(top) != 2 || string(top["schema"]) != "2" {
 		t.Fatalf("top-level keys wrong: %s", raw)
 	}
 	if name, err := ReadActive(root); err != nil || name != "2-beta" {
@@ -124,18 +124,18 @@ func TestSaveStateWritesSlimShapeAndLoadResolves(t *testing.T) {
 	if sf.Changes["2-beta"].UpdatedAt == "" {
 		t.Fatal("per-change updatedAt must be stamped")
 	}
-	if sf.Changes["1-alpha"].Gates["requirements"] != "approved" {
-		t.Fatalf("1-alpha requirements = %q", sf.Changes["1-alpha"].Gates["requirements"])
+	if sf.Changes["1-alpha"].Gates["spec"] != "approved" {
+		t.Fatalf("1-alpha requirements = %q", sf.Changes["1-alpha"].Gates["spec"])
 	}
-	if sf.Changes["2-beta"].Gates["design"] != "draft" {
-		t.Fatalf("2-beta design = %q", sf.Changes["2-beta"].Gates["design"])
+	if sf.Changes["2-beta"].Gates["architecture"] != "draft" {
+		t.Fatalf("2-beta design = %q", sf.Changes["2-beta"].Gates["architecture"])
 	}
 
 	active, err := LoadState(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if active.Name != "2-beta" || active.Phase != "design" || active.Status != "draft" {
+	if active.Name != "2-beta" || active.Phase != "architecture" || active.Status != "draft" {
 		t.Fatalf("active = %+v", active)
 	}
 
@@ -143,7 +143,7 @@ func TestSaveStateWritesSlimShapeAndLoadResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if switched.Phase != "requirements" || switched.Status != "approved" {
+	if switched.Phase != "spec" || switched.Status != "approved" {
 		t.Fatalf("switched phase/status = %q/%q", switched.Phase, switched.Status)
 	}
 	if !reflect.DeepEqual(switched.Sources, []string{"00_intake/1.md"}) {
@@ -212,7 +212,7 @@ func TestEachChangeKeepsOwnMachine(t *testing.T) {
 
 	st := DefaultState()
 	st.Name = "1-auth-flow"
-	if err := SetGate(&st, "plan", "approved", ""); err != nil {
+	if err := SetGate(&st, "breakdown", "approved", ""); err != nil {
 		t.Fatal(err)
 	}
 	st.Sources = []string{"00_intake/1.md"}
@@ -232,14 +232,14 @@ func TestEachChangeKeepsOwnMachine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if back.Name != "1-auth-flow" || back.Phase != "plan" || back.Status != "approved" {
+	if back.Name != "1-auth-flow" || back.Phase != "breakdown" || back.Status != "approved" {
 		t.Fatalf("back = %+v", back)
 	}
 	if !reflect.DeepEqual(back.Sources, []string{"00_intake/1.md"}) {
 		t.Fatalf("back sources = %v", back.Sources)
 	}
-	if back.Gates["plan"] != "approved" {
-		t.Fatalf("back gates.plan = %q", back.Gates["plan"])
+	if back.Gates["breakdown"] != "approved" {
+		t.Fatalf("back gates.plan = %q", back.Gates["breakdown"])
 	}
 }
 
@@ -269,7 +269,7 @@ func TestSwitchRejectsUnknownsAndKnownChangesLists(t *testing.T) {
 
 	st := DefaultState()
 	st.Name = "1-a"
-	if err := SetGate(&st, "requirements", "await-approval", ""); err != nil {
+	if err := SetGate(&st, "spec", "await-approval", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := SaveState(root, &st); err != nil {
@@ -295,7 +295,7 @@ func TestSwitchRejectsUnknownsAndKnownChangesLists(t *testing.T) {
 
 func TestAppendLog(t *testing.T) {
 	root := t.TempDir()
-	if err := AppendLog(root, "requirements → await-approval"); err != nil {
+	if err := AppendLog(root, "spec → await-approval"); err != nil {
 		t.Fatal(err)
 	}
 	if err := AppendLog(root, "requirements approved"); err != nil {
@@ -372,21 +372,21 @@ func TestAdvanceGateTransitionsAndLogs(t *testing.T) {
 	if _, err := SeedChange(root, "1-x", false, nil); err != nil {
 		t.Fatal(err)
 	}
-	st, err := AdvanceGate(root, "requirements", "await-approval", "")
+	st, err := AdvanceGate(root, "spec", "await-approval", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Phase != "requirements" || st.Status != "await-approval" || st.Gates["requirements"] != "await-approval" {
+	if st.Phase != "spec" || st.Status != "await-approval" || st.Gates["spec"] != "await-approval" {
 		t.Fatalf("st = %+v", st)
 	}
 	b, _ := os.ReadFile(LogPath(root))
-	if !strings.Contains(string(b), "requirements → await-approval") {
+	if !strings.Contains(string(b), "spec → await-approval") {
 		t.Fatalf("log missing transition: %q", b)
 	}
 }
 
 func TestAdvanceGateRequiresActiveChange(t *testing.T) {
-	if _, err := AdvanceGate(t.TempDir(), "requirements", "approved", ""); err == nil || !strings.Contains(err.Error(), "no active change") {
+	if _, err := AdvanceGate(t.TempDir(), "spec", "approved", ""); err == nil || !strings.Contains(err.Error(), "no active change") {
 		t.Fatalf("want no active change, got %v", err)
 	}
 }
@@ -506,7 +506,7 @@ func TestPhasesAndDefaults(t *testing.T) {
 	for _, p := range Machine.Phases {
 		names = append(names, p.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"intake", "explore", "requirements", "design", "plan"}) {
+	if !reflect.DeepEqual(names, []string{"intake", "research", "explore", "synthesis", "spec", "architecture", "breakdown", "publish"}) {
 		t.Fatalf("phases = %v", names)
 	}
 	if len(DefaultState().Gates) != 0 {
@@ -515,7 +515,7 @@ func TestPhasesAndDefaults(t *testing.T) {
 }
 
 func TestCheckGate(t *testing.T) {
-	approved := map[string]string{"intake": "approved", "explore": "approved", "requirements": "approved", "design": "approved"}
+	approved := map[string]string{"intake": "approved", "research": "skipped", "explore": "approved", "synthesis": "skipped", "spec": "approved", "architecture": "approved"}
 	cases := []struct {
 		name          string
 		gates         map[string]string
@@ -523,12 +523,12 @@ func TestCheckGate(t *testing.T) {
 		want          string // substring of the violation; "" = allowed
 	}{
 		{"first phase", nil, "intake", "draft", ""},
-		{"skips ahead", map[string]string{"intake": "approved", "explore": "skipped"}, "design", "approved", "requires requirements"},
-		{"await is not approved", map[string]string{"intake": "await-approval"}, "requirements", "draft", "requires intake"},
-		{"skipped explore passes", map[string]string{"intake": "approved", "explore": "skipped"}, "requirements", "draft", ""},
-		{"unskipped explore blocks", map[string]string{"intake": "approved"}, "requirements", "draft", "requires explore"},
-		{"full loop", approved, "plan", "approved", ""},
-		{"clearing always allowed", nil, "plan", "", ""},
+		{"skips ahead", map[string]string{"intake": "approved", "research": "skipped", "explore": "skipped", "synthesis": "skipped"}, "architecture", "approved", "requires spec"},
+		{"await is not approved", map[string]string{"intake": "await-approval"}, "research", "draft", "requires intake"},
+		{"skipped phases pass", map[string]string{"intake": "approved", "research": "skipped", "explore": "skipped", "synthesis": "skipped"}, "spec", "draft", ""},
+		{"unskipped explore blocks", map[string]string{"intake": "approved", "research": "skipped"}, "spec", "draft", "requires explore"},
+		{"full loop", approved, "breakdown", "approved", ""},
+		{"clearing always allowed", nil, "breakdown", "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -566,9 +566,45 @@ func TestSeedChangeSkipsExploreWithoutRepo(t *testing.T) {
 
 // A STATE.json from before schema 1 keeps every approval, and `mode` becomes
 // whether explore is skipped.
-func TestOldStateFileUpgradesWithApprovalsIntact(t *testing.T) {
+
+func TestSeedChangeSkipsSynthesisUnlessSeveralRepos(t *testing.T) {
 	root := t.TempDir()
-	old := `{
+	one, err := SeedChange(root, "1-x", true, nil, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if one.Gates["synthesis"] != "skipped" {
+		t.Fatalf("one repo: %+v", one.Gates)
+	}
+	two, err := SeedChange(root, "2-y", true, nil, "a", "b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if two.Gates["synthesis"] != "" || two.Gates["research"] != "" {
+		t.Fatalf("two repos: %+v", two.Gates)
+	}
+}
+
+func readMigrated(t *testing.T, body string) map[string]*State {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(StatePath(root), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changes, err := ReadChanges(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := os.ReadFile(StatePath(root)); string(after) != body {
+		t.Fatal("a read rewrote STATE.json")
+	}
+	return changes
+}
+
+// A STATE.json from before schema 1 keeps every approval: `mode` becomes whether
+// explore is skipped, and v1's phases are renamed.
+func TestMigrateFromMode(t *testing.T) {
+	changes := readMigrated(t, `{
   "changes": {
     "1-idea": {"phase":"plan","status":"approved","mode":"greenfield","sources":["00_intake/1.md"],"updatedAt":"2026-10-01T00:00:00.000Z",
       "gates":{"intake":"approved","explore":"","requirements":"approved","design":"approved","plan":"approved"}},
@@ -577,48 +613,70 @@ func TestOldStateFileUpgradesWithApprovalsIntact(t *testing.T) {
     "3-repo": {"phase":"intake","status":"approved","mode":"existing","sources":[],"updatedAt":"2026-10-03T00:00:00.000Z",
       "gates":{"intake":"approved","explore":"","requirements":"","design":"","plan":""}}
   }
-}`
-	if err := os.WriteFile(StatePath(root), []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	changes, err := ReadChanges(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+}`)
 	want := map[string]map[string]string{
-		"1-idea": {"intake": "approved", "explore": "skipped", "requirements": "approved", "design": "approved", "plan": "approved"},
-		"2-repo": {"intake": "approved", "explore": "approved", "requirements": "draft"},
-		"3-repo": {"intake": "approved"},
+		"1-idea": {"intake": "approved", "research": "skipped", "explore": "skipped", "synthesis": "skipped", "spec": "approved", "architecture": "approved", "breakdown": "approved"},
+		"2-repo": {"intake": "approved", "research": "skipped", "explore": "approved", "synthesis": "skipped", "spec": "draft"},
+		"3-repo": {"intake": "approved", "synthesis": "skipped"},
 	}
 	for name, gates := range want {
 		if !reflect.DeepEqual(changes[name].Gates, gates) {
 			t.Errorf("%s gates = %+v, want %+v", name, changes[name].Gates, gates)
 		}
 	}
-	if got := CheckGate(*changes["1-idea"], "plan", "approved"); got != nil {
-		t.Errorf("greenfield change should stay satisfied: %v", got)
+	if changes["1-idea"].Phase != "breakdown" || changes["2-repo"].Phase != "spec" {
+		t.Errorf("phases not renamed: %q, %q", changes["1-idea"].Phase, changes["2-repo"].Phase)
 	}
-	if got := CheckGate(*changes["3-repo"], "requirements", "draft"); got == nil {
-		t.Error("existing change still has to finish explore")
+	if got := CheckGate(*changes["1-idea"], "publish", "in-progress"); got != nil {
+		t.Errorf("an approved plan should reach publish: %v", got)
 	}
-	if after, _ := os.ReadFile(StatePath(root)); string(after) != old {
-		t.Fatal("a read rewrote STATE.json")
+	if got := CheckGate(*changes["3-repo"], "spec", "draft"); got == nil {
+		t.Error("a change still has to do research and explore")
 	}
+}
 
-	// The next write persists the new shape, with no trace of mode.
-	st := *changes["2-repo"]
-	if err := SaveState(root, &st); err != nil {
+func TestMigrateFromSchema1(t *testing.T) {
+	changes := readMigrated(t, `{"schema":1,"changes":{
+  "1-past":{"phase":"plan","status":"draft","gates":{"intake":"approved","explore":"skipped","requirements":"approved","design":"approved","plan":"draft"},"sources":[]},
+  "2-new":{"phase":"intake","status":"draft","gates":{"intake":"draft","explore":"skipped"},"sources":[]},
+  "3-multi":{"phase":"intake","status":"approved","gates":{"intake":"approved"},"sources":[],"repos":["a","b"]},
+  "4-closed":{"phase":"requirements","status":"closed","gates":{"intake":"approved","explore":"skipped","requirements":"draft"},"sources":[]}
+}}`)
+	want := map[string]map[string]string{
+		"1-past":   {"intake": "approved", "research": "skipped", "explore": "skipped", "synthesis": "skipped", "spec": "approved", "architecture": "approved", "breakdown": "draft"},
+		"2-new":    {"intake": "draft", "explore": "skipped", "synthesis": "skipped"},
+		"3-multi":  {"intake": "approved"},
+		"4-closed": {"intake": "approved", "research": "skipped", "explore": "skipped", "synthesis": "skipped", "spec": "draft"},
+	}
+	for name, gates := range want {
+		if !reflect.DeepEqual(changes[name].Gates, gates) {
+			t.Errorf("%s gates = %+v, want %+v", name, changes[name].Gates, gates)
+		}
+	}
+	if !changes["4-closed"].IsClosed() || changes["4-closed"].Phase != "spec" {
+		t.Errorf("closed change = %+v", changes["4-closed"])
+	}
+}
+
+func TestMigrationPersistsOnNextWrite(t *testing.T) {
+	root := t.TempDir()
+	body := `{"schema":1,"changes":{"1-x":{"phase":"design","status":"draft","gates":{"intake":"approved","explore":"skipped","requirements":"approved","design":"draft"}}}}`
+	if err := os.WriteFile(StatePath(root), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(ChangeDir(root, "2-y"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SwitchTo(root, "2-y"); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(StatePath(root))
-	if strings.Contains(string(raw), `"mode"`) || !strings.Contains(string(raw), `"schema": 1`) {
-		t.Fatalf("not upgraded:\n%s", raw)
+	for _, want := range []string{`"schema": 2`, `"architecture": "draft"`} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("missing %s in:\n%s", want, raw)
+		}
 	}
-	again, err := ReadChanges(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again["1-idea"].Gates["explore"] != "skipped" || again["1-idea"].Gates["plan"] != "approved" {
-		t.Fatalf("1-idea after write = %+v", again["1-idea"].Gates)
+	if strings.Contains(string(raw), `"design"`) {
+		t.Fatalf("old phase remains:\n%s", raw)
 	}
 }

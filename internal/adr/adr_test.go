@@ -16,7 +16,7 @@ func TestCreateWritesNumberedADR(t *testing.T) {
 	if rec.Number != 1 || rec.Slug != "use-postgres" || rec.Status != "proposed" {
 		t.Fatalf("rec = %+v", rec)
 	}
-	if !strings.HasSuffix(rec.Path, filepath.Join("03_design", "adr", "0001-use-postgres.md")) {
+	if !strings.HasSuffix(rec.Path, filepath.Join("04_architecture", "adr", "0001-use-postgres.md")) {
 		t.Fatalf("path = %q", rec.Path)
 	}
 	raw, _ := os.ReadFile(rec.Path)
@@ -49,7 +49,7 @@ func TestListSortedSkippingNonNumeric(t *testing.T) {
 	root := t.TempDir()
 	Create(root, "", Options{Title: "first"})
 	Create(root, "", Options{Title: "second"})
-	os.WriteFile(filepath.Join(root, "03_design", "adr", "README.md"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(root, "04_architecture", "adr", "README.md"), []byte("x"), 0o644)
 	list := List(root, "")
 	if len(list) != 2 || list[0].Number != 1 || list[1].Number != 2 {
 		t.Fatalf("list = %+v", list)
@@ -82,7 +82,7 @@ func TestParseExtractsFields(t *testing.T) {
 
 func TestAdrDirDefault(t *testing.T) {
 	root := t.TempDir()
-	if AdrDir(root, "") != filepath.Join(root, "03_design", "adr") {
+	if AdrDir(root, "") != filepath.Join(root, "04_architecture", "adr") {
 		t.Fatalf("dir = %q", AdrDir(root, ""))
 	}
 }

@@ -11,7 +11,8 @@ import (
 	"github.com/btdstudio/zumen/internal/state"
 )
 
-// workspace returns an isolated root with one greenfield change at intake.
+// workspace returns an isolated root with one change at intake. It has no repo, so
+// explore and synthesis start skipped.
 func workspace(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -41,21 +42,30 @@ func readLog(t *testing.T, root string) string {
 
 func TestGateRefusesSkippingAhead(t *testing.T) {
 	root := workspace(t)
-	if code := runGate(root, []string{"design", "approved"}); code != 1 {
+	if code := runGate(root, []string{"architecture", "approved"}); code != 1 {
 		t.Fatalf("code = %d, want 1", code)
 	}
 	st, err := state.LoadState(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Gates["design"] != "" || st.Phase != "intake" {
+	if st.Gates["architecture"] != "" || st.Phase != "intake" {
 		t.Fatalf("refused gate changed state: %+v", st)
 	}
 }
 
 func TestGateFollowsLoopInOrder(t *testing.T) {
 	root := workspace(t)
-	for _, phase := range []string{"intake", "requirements", "design", "plan"} {
+	if code := runGate(root, []string{"intake", "approved"}); code != 0 {
+		t.Fatal("intake")
+	}
+	if code := runGate(root, []string{"spec", "approved"}); code != 1 {
+		t.Fatalf("spec before research = %d, want 1", code)
+	}
+	if code := runGate(root, []string{"research", "skipped", "--reason", "nothing to find out"}); code != 0 {
+		t.Fatal("research")
+	}
+	for _, phase := range []string{"spec", "architecture", "breakdown"} {
 		if code := runGate(root, []string{phase, "approved"}); code != 0 {
 			t.Fatalf("gate %s = %d", phase, code)
 		}
@@ -67,10 +77,10 @@ func TestGateFollowsLoopInOrder(t *testing.T) {
 
 func TestGateForceOverridesAndLogs(t *testing.T) {
 	root := workspace(t)
-	if code := runGate(root, []string{"design", "approved", "--force"}); code != 0 {
+	if code := runGate(root, []string{"architecture", "approved", "--force"}); code != 0 {
 		t.Fatalf("code = %d", code)
 	}
-	if log := readLog(t, root); !strings.Contains(log, "override: zumen: design requires intake") {
+	if log := readLog(t, root); !strings.Contains(log, "override: zumen: architecture requires intake") {
 		t.Fatalf("override not logged: %s", log)
 	}
 }
@@ -78,7 +88,7 @@ func TestGateForceOverridesAndLogs(t *testing.T) {
 func TestGateNonBlockSettingWarnsAndProceeds(t *testing.T) {
 	root := workspace(t)
 	setGates(t, root, "auto")
-	if code := runGate(root, []string{"design", "approved"}); code != 0 {
+	if code := runGate(root, []string{"architecture", "approved"}); code != 0 {
 		t.Fatalf("code = %d", code)
 	}
 	if log := readLog(t, root); !strings.Contains(log, "override:") {
@@ -89,50 +99,11 @@ func TestGateNonBlockSettingWarnsAndProceeds(t *testing.T) {
 func TestGateRejectsBadNamesEvenWithForce(t *testing.T) {
 	root := workspace(t)
 	before := readLog(t, root)
-	if code := runGate(root, []string{"design", "nope", "--force"}); code != 1 {
+	if code := runGate(root, []string{"architecture", "nope", "--force"}); code != 1 {
 		t.Fatalf("code = %d, want 1", code)
 	}
 	if log := readLog(t, root); log != before {
 		t.Fatalf("log = %q", log)
-	}
-}
-
-func TestExportRequiresApprovedPlan(t *testing.T) {
-	root := workspace(t)
-	spec := filepath.Join(state.SpecsDir(root), "1-auth-flow", "tasks.json")
-	if err := os.WriteFile(spec, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	target := t.TempDir()
-	exported := filepath.Join(target, "01_planning", "specs", "1-auth-flow", "tasks.json")
-
-	if code := runExport(root, []string{"--to", target}); code != 1 {
-		t.Fatalf("unapproved export = %d, want 1", code)
-	}
-	if _, err := os.Stat(exported); err == nil {
-		t.Fatal("refused export wrote files")
-	}
-	if code := runExport(root, []string{"--to", target, "--force"}); code != 0 {
-		t.Fatalf("forced export = %d", code)
-	}
-	if _, err := os.Stat(exported); err != nil {
-		t.Fatal(err)
-	}
-	if log := readLog(t, root); !strings.Contains(log, "override: export:") {
-		t.Fatalf("override not logged: %s", log)
-	}
-
-	// Approved, but the destination now exists: still refused without --force.
-	for _, phase := range []string{"intake", "requirements", "design", "plan"} {
-		if code := runGate(root, []string{phase, "approved"}); code != 0 {
-			t.Fatalf("gate %s = %d", phase, code)
-		}
-	}
-	if code := runExport(root, []string{"--to", target}); code != 1 {
-		t.Fatalf("overwriting export = %d, want 1", code)
-	}
-	if code := runExport(root, []string{"--to", t.TempDir()}); code != 0 {
-		t.Fatalf("approved export = %d", code)
 	}
 }
 
@@ -182,8 +153,11 @@ func TestChangeNewWithRepoRequiresExplore(t *testing.T) {
 	if code := runGate(root, []string{"intake", "approved"}); code != 0 {
 		t.Fatalf("gate intake = %d", code)
 	}
-	if code := runGate(root, []string{"requirements", "draft"}); code != 1 {
-		t.Fatalf("requirements before explore = %d, want 1", code)
+	if code := runGate(root, []string{"research", "skipped", "--reason", "none"}); code != 0 {
+		t.Fatal("research")
+	}
+	if code := runGate(root, []string{"spec", "draft"}); code != 1 {
+		t.Fatalf("spec before explore = %d, want 1", code)
 	}
 	if code := runGate(root, []string{"explore", "skipped"}); code != 1 {
 		t.Fatalf("skip without reason = %d, want 1", code)
@@ -194,32 +168,38 @@ func TestChangeNewWithRepoRequiresExplore(t *testing.T) {
 	if log := readLog(t, root); !strings.Contains(log, "explore → skipped (already surveyed)") {
 		t.Fatalf("skip reason not logged: %s", log)
 	}
-	if code := runGate(root, []string{"requirements", "draft"}); code != 0 {
-		t.Fatalf("requirements after skip = %d", code)
+	if code := runGate(root, []string{"spec", "draft"}); code != 0 {
+		t.Fatalf("spec after skip = %d", code)
 	}
 }
 
 func TestReopenClearsLaterApprovals(t *testing.T) {
 	root := workspace(t)
-	for _, phase := range []string{"intake", "requirements", "design"} {
+	if code := runGate(root, []string{"intake", "approved"}); code != 0 {
+		t.Fatal("intake")
+	}
+	if code := runGate(root, []string{"research", "skipped", "--reason", "none"}); code != 0 {
+		t.Fatal("research")
+	}
+	for _, phase := range []string{"spec", "architecture"} {
 		if code := runGate(root, []string{phase, "approved"}); code != 0 {
 			t.Fatalf("gate %s = %d", phase, code)
 		}
 	}
-	if code := runReopen(root, []string{"requirements"}); code != 1 {
+	if code := runReopen(root, []string{"spec"}); code != 1 {
 		t.Fatalf("reopen without reason = %d, want 1", code)
 	}
-	if code := runReopen(root, []string{"requirements", "--reason", "scope changed"}); code != 0 {
+	if code := runReopen(root, []string{"spec", "--reason", "scope changed"}); code != 0 {
 		t.Fatalf("reopen = %d", code)
 	}
 	st, err := state.LoadState(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Gates["requirements"] != "draft" || st.Gates["design"] != "" || st.Gates["intake"] != "approved" || st.Gates["explore"] != "skipped" {
+	if st.Gates["spec"] != "draft" || st.Gates["architecture"] != "" || st.Gates["intake"] != "approved" || st.Gates["explore"] != "skipped" {
 		t.Fatalf("gates = %+v", st.Gates)
 	}
-	if log := readLog(t, root); !strings.Contains(log, "reopened requirements (scope changed)") {
+	if log := readLog(t, root); !strings.Contains(log, "reopened spec (scope changed)") {
 		t.Fatalf("reopen not logged: %s", log)
 	}
 }
@@ -347,4 +327,151 @@ func TestEnvNeedsAnActiveChange(t *testing.T) {
 
 func repoCmd(root string, args ...string) int {
 	return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)
+}
+
+func ticketRepo(t *testing.T, root string) {
+	t.Helper()
+	if code := repoCmd(root, "add", "app", "https://github.com/org/app"); code != 0 {
+		t.Fatalf("repo add = %d", code)
+	}
+}
+
+func TestTicketsNewCheckOrderStatus(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runTickets(root, []string{"new", "story", "No repo"}); code != 1 {
+		t.Fatalf("story without repo = %d, want 1", code)
+	}
+	if code := runTickets(root, []string{"new", "story", "Bad repo", "--repo", "nope"}); code != 1 {
+		t.Fatalf("unregistered repo = %d, want 1", code)
+	}
+	if code := runTickets(root, []string{"new", "bug", "Bad type"}); code != 1 {
+		t.Fatalf("bad type = %d, want 1", code)
+	}
+	for _, c := range [][]string{
+		{"new", "epic", "Release"},
+		{"new", "feature", "Pipeline", "--parent", "E-0001"},
+		{"new", "story", "Second", "--parent", "F-0002", "--repo", "app", "--depends", "S-0004"},
+		{"new", "story", "First", "--parent", "F-0002", "--repo", "app"},
+	} {
+		if code := runTickets(root, c); code != 0 {
+			t.Fatalf("tickets %v = %d", c, code)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0003.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"change: 1-auth-flow", "spec: specs/1-auth-flow/functional-spec.md", "## Acceptance criteria", "status: draft"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("ticket missing %q:\n%s", want, data)
+		}
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) })
+	if code != 0 || !strings.Contains(out, "4 tickets ok") {
+		t.Fatalf("check = %d: %s", code, out)
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"order"}) })
+	if code != 0 || strings.Index(out, "S-0004") > strings.Index(out, "S-0003") || strings.Index(out, "E-0001") != 0 {
+		t.Fatalf("order = %d:\n%s", code, out)
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"status"}) })
+	if code != 0 || !strings.Contains(out, "draft      4") {
+		t.Fatalf("status = %d:\n%s", code, out)
+	}
+}
+
+func TestTicketsCheckCatchesCyclesAndUnreadableFiles(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runTickets(root, []string{"new", "story", "A", "--repo", "app", "--depends", "S-0002"}); code != 0 {
+		t.Fatal("A")
+	}
+	if code := runTickets(root, []string{"new", "story", "B", "--repo", "app", "--depends", "S-0001"}); code != 0 {
+		t.Fatal("B")
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) })
+	if code != 1 || !strings.Contains(out, "cycle among S-0001, S-0002") {
+		t.Fatalf("check = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"order"}); code != 1 {
+		t.Fatalf("order on a cycle = %d, want 1", code)
+	}
+	bad := filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0009.md")
+	if err := os.WriteFile(bad, []byte("not a ticket"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"check"}) })
+	if code != 1 || !strings.Contains(out, "S-0009.md") {
+		t.Fatalf("check = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"new", "story", "C", "--repo", "app"}); code != 1 {
+		t.Fatalf("new with an unreadable ticket = %d, want 1", code)
+	}
+}
+
+func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runTickets(root, []string{"new", "story", "A", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	path := filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0001.md")
+	for _, args := range [][]string{
+		{"mark-published", "S-0001"},
+		{"mark-published", "S-0001", "--external", "noequals"},
+		{"mark-published", "S-0099", "--external", "ado=1"},
+		{"unfreeze", "S-0001"},
+	} {
+		if code := runTickets(root, args); code != 1 {
+			t.Errorf("tickets %v = %d, want 1", args, code)
+		}
+	}
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 0 {
+		t.Fatal("publish")
+	}
+	if log := readLog(t, root); !strings.Contains(log, "S-0001 published to ado (48213)") {
+		t.Fatalf("log = %s", log)
+	}
+	data, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(data), "AC1", "AC9", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) })
+	if code != 1 || !strings.Contains(out, "drifted") {
+		t.Fatalf("check = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 1 {
+		t.Fatal("publishing a drifted ticket should fail")
+	}
+	if code := runTickets(root, []string{"unfreeze", "S-0001", "--reason", "scope changed"}); code != 0 {
+		t.Fatal("unfreeze")
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"status"}) })
+	if code != 0 || !strings.Contains(out, "unfrozen   1  S-0001") {
+		t.Fatalf("status = %d:\n%s", code, out)
+	}
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 0 {
+		t.Fatal("republish")
+	}
+	if code, _ := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 0 {
+		t.Fatalf("check after republish = %d", code)
+	}
+}
+
+func TestTicketsNewRefusesWithoutAnOpenChange(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runChange(root, []string{"close", "1-auth-flow", "--reason", "x"}); code != 0 {
+		t.Fatal("close")
+	}
+	if code := runTickets(root, []string{"new", "epic", "A"}); code != 1 {
+		t.Fatalf("no active = %d, want 1", code)
+	}
+	if code := runSwitch(root, []string{"1-auth-flow"}); code != 0 {
+		t.Fatal("switch")
+	}
+	if code := runTickets(root, []string{"new", "epic", "A"}); code != 1 {
+		t.Fatalf("closed = %d, want 1", code)
+	}
 }

@@ -28,15 +28,13 @@ internal/state/     kiso phase machine config, old STATE.json migration
 internal/settings/  settings shape, merged through kiso (global ← project)
 internal/source/    intake store (frontmatter, sequential ids)
 internal/adr/       ADR store (numbered, immutable)
-internal/export/    copy a spec into a tomo workspace
-internal/cli/       helper subcommands (status, settings, switch, source, adr, change, gate, reopen)
+internal/cli/       helper subcommands (status, settings, switch, source, adr, change, gate, reopen, tickets)
 testdata/golden/    byte-identity fixtures (icm/manifest.json)
 ```
 
 ## Process
 
-- Intake before requirements; explore (unless skipped) before requirements;
-  requirements before design; design before plan.
+- intake → research → explore → synthesis → spec → architecture → breakdown → publish.
 - `zumen init` scaffolds a project; `zumen update` refreshes its managed files.
 
 ## Development
