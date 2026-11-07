@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/btdstudio/kiso/version"
 	"github.com/btdstudio/zumen/internal/cli"
 	"github.com/btdstudio/zumen/internal/icm"
-	"github.com/btdstudio/zumen/internal/version"
 )
 
 func main() {

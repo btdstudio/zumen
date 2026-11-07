@@ -22,6 +22,8 @@ package state
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/btdstudio/kiso/changelog"
+	"github.com/btdstudio/kiso/workspace"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -87,9 +89,9 @@ type stateFile struct {
 	Changes map[string]*changeRecord `json:"changes"`
 }
 
-func Workspace(root string) string  { return filepath.Join(root, ".zumen") }
+func Workspace(root string) string  { return workspace.Dir(root, "zumen") }
 func StatePath(root string) string  { return filepath.Join(root, "STATE.json") }
-func ActivePath(root string) string { return filepath.Join(Workspace(root), "active") }
+func ActivePath(root string) string { return workspace.ActivePath(root, "zumen") }
 func SpecsDir(root string) string   { return filepath.Join(root, "specs") }
 func LogPath(root string) string    { return filepath.Join(root, "LOG.md") }
 
@@ -172,24 +174,9 @@ func normalizeMode(m string) string {
 }
 
 // ReadActive returns the active change's name ("" when none is set).
-func ReadActive(root string) (string, error) {
-	p := ActivePath(root)
-	data, err := os.ReadFile(p)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("zumen: cannot read %s: %v", p, err)
-	}
-	return strings.TrimSpace(string(data)), nil
-}
+func ReadActive(root string) (string, error) { return workspace.ReadActive(root, "zumen") }
 
-func writeActive(root, name string) error {
-	if err := os.MkdirAll(Workspace(root), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(ActivePath(root), []byte(name+"\n"), 0o644)
-}
+func writeActive(root, name string) error { return workspace.WriteActive(root, "zumen", name) }
 
 // resolve builds the machine for one change from its record (nil = fresh).
 func resolve(name string, rec *changeRecord) State {
@@ -494,14 +481,5 @@ func AdvanceGate(root, phase, status string) (State, error) {
 
 // AppendLog appends one timestamped line to LOG.md.
 func AppendLog(root, line string) error {
-	if err := os.MkdirAll(Workspace(root), 0o755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(LogPath(root), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = fmt.Fprintf(f, "- %s %s\n", isoMillis(Now()), line)
-	return err
+	return changelog.Append(LogPath(root), Now(), line)
 }
