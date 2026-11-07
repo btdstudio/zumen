@@ -417,6 +417,13 @@ func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
 		t.Fatal("new")
 	}
 	path := filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0001.md")
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=1"}); code != 1 {
+		t.Fatalf("publishing a draft = %d, want 1", code)
+	}
+	draft, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(draft), "status: draft", "status: ready", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][]string{
 		{"mark-published", "S-0001"},
 		{"mark-published", "S-0001", "--external", "noequals"},
@@ -427,10 +434,10 @@ func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
 			t.Errorf("tickets %v = %d, want 1", args, code)
 		}
 	}
-	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 0 {
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#7"}); code != 0 {
 		t.Fatal("publish")
 	}
-	if log := readLog(t, root); !strings.Contains(log, "S-0001 published to ado (48213)") {
+	if log := readLog(t, root); !strings.Contains(log, "S-0001 published to github (org/app#7)") {
 		t.Fatalf("log = %s", log)
 	}
 	data, _ := os.ReadFile(path)
@@ -441,7 +448,7 @@ func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
 	if code != 1 || !strings.Contains(out, "drifted") {
 		t.Fatalf("check = %d: %s", code, out)
 	}
-	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 1 {
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#7"}); code != 1 {
 		t.Fatal("publishing a drifted ticket should fail")
 	}
 	if code := runTickets(root, []string{"unfreeze", "S-0001", "--reason", "scope changed"}); code != 0 {
@@ -451,7 +458,7 @@ func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "unfrozen   1  S-0001") {
 		t.Fatalf("status = %d:\n%s", code, out)
 	}
-	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=48213"}); code != 0 {
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#7"}); code != 0 {
 		t.Fatal("republish")
 	}
 	if code, _ := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 0 {

@@ -14,6 +14,7 @@ type Settings struct {
 	SourceDir   string `json:"sourceDir"`
 	ArtifactDir string `json:"artifactDir"`
 	AdrDir      string `json:"adrDir"`
+	SyncFile    string `json:"syncFile"`
 }
 
 // Loaded is the result of LoadSettings.
@@ -33,6 +34,7 @@ func DefaultSettings() Settings {
 		SourceDir:   "00_intake",           // the intake store
 		ArtifactDir: "specs",               // per-change artifacts
 		AdrDir:      "04_architecture/adr", // architecture decision records
+		SyncFile:    "06_publish/sync.md",  // how an agent talks to the PM tool
 	}
 }
 
@@ -52,6 +54,8 @@ func apply(s *Settings, key string, value any) {
 		s.ArtifactDir = val
 	case "adrDir":
 		s.AdrDir = val
+	case "syncFile":
+		s.SyncFile = val
 	}
 }
 

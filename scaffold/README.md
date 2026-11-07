@@ -10,6 +10,7 @@ Start with [AGENTS.md](./AGENTS.md).
 - `03_spec/` — analyst: what, and how we know it's done
 - `04_architecture/` — architect: the smallest solution + ADRs
 - `05_breakdown/` — architect: tickets
+- `06_publish/` — publisher: sync tickets to a PM tool, then freeze them
 - `specs/` — one folder per change, holding its spec, architecture and tickets
 
 The loop is `intake → [research] → [explore] → [synthesis] → spec → architecture →
