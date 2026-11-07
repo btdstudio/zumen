@@ -13,8 +13,9 @@ This file applies to agents working on the zumen repo itself.
   and the golden test (`internal/icm/golden_test.go`) pin it. After editing the
   scaffold, run `go test ./internal/icm -update` to regenerate the golden.
 - Workspace state is committed so approvals survive a clone: `STATE.json`,
-  `LOG.md`, `.zumen/settings.json`, `.zumen/manifest.json`. Only `.zumen/active`
-  (the current change) is local and gitignored — never commit it.
+  `LOG.md`, `REPOS.json`, `.zumen/settings.json`, `.zumen/manifest.json`. Only
+  `.zumen/active` and `.zumen/paths.json` are local and gitignored — never commit
+  them.
 
 ## Layout
 

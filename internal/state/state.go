@@ -14,6 +14,7 @@
 //	LOG.md             one timestamped line per state change / gate (committed)
 //	.zumen/active      the active change's name; gitignored, because each
 //	                   checkout works on its own change
+//	REPOS.json         logical repos (committed); .zumen/paths.json is local
 //	specs/             per-change folders: <id>-<slug>/requirements.md,
 //	                   design.md, tasks.json
 package state
@@ -115,8 +116,8 @@ func CheckGate(st State, phase, status string) error { return Machine.CheckGate(
 // the active change. Without a repo there's nothing to explore, so explore starts
 // skipped. Sources are committed with it, so a clone has what the record points
 // at.
-func SeedChange(root, name string, hasRepo bool, sources []string) (State, error) {
-	opts := kiso.SeedOptions{Sources: sources, Paths: sources}
+func SeedChange(root, name string, hasRepo bool, sources []string, repos ...string) (State, error) {
+	opts := kiso.SeedOptions{Sources: sources, Repos: repos, Paths: sources}
 	if !hasRepo {
 		opts.Skip = map[string]string{"explore": NoRepoReason}
 	}

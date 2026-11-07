@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/btdstudio/kiso/repos"
 	"github.com/btdstudio/zumen/internal/state"
 )
 
@@ -274,4 +275,76 @@ func TestSwitchHidesClosedUnlessAll(t *testing.T) {
 	if out := list("--all"); !strings.Contains(out, "1-auth-flow") {
 		t.Fatalf("--all hid the closed change: %q", out)
 	}
+}
+
+func captureStdout(t *testing.T, fn func() int) (int, string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	code := fn()
+	os.Stdout = orig
+	w.Close()
+	out, _ := io.ReadAll(r)
+	return code, string(out)
+}
+
+func TestEnvPrintsFlagsForTheChangesRepos(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	first, second := t.TempDir(), t.TempDir()
+	for name, path := range map[string]string{"first": first, "second": second, "other": t.TempDir()} {
+		if code := repoCmd(root, "add", name, "https://github.com/org/"+name, "--path", path); code != 0 {
+			t.Fatalf("repo add %s = %d", name, code)
+		}
+	}
+	if code := runChange(root, []string{"new", "Release", "--repo", "first", "--repo", "second"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	st, err := state.LoadState(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Gates["explore"] != "" || len(st.Repos) != 2 {
+		t.Fatalf("st = %+v", st)
+	}
+	code, out := captureStdout(t, func() int { return runEnv(root) })
+	if code != 0 || strings.TrimSpace(out) != "--add-dir "+first+" --add-dir "+second {
+		t.Fatalf("code = %d, out = %q", code, out)
+	}
+}
+
+func TestChangeNewRepoMayStillBeAPathButNotInAMultiRepoChange(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	if code := runChange(root, []string{"new", "One", "--repo", "/some/path"}); code != 0 {
+		t.Fatalf("single path = %d", code)
+	}
+	st, err := state.LoadState(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(st.Repos) != 0 || st.Gates["explore"] != "" {
+		t.Fatalf("st = %+v", st)
+	}
+	if code := runChange(root, []string{"new", "Two", "--repo", "/a", "--repo", "/b"}); code != 1 {
+		t.Fatalf("two paths = %d, want 1", code)
+	}
+	if _, err := os.Stat(filepath.Join(root, "00_intake", "2.md")); err == nil {
+		t.Fatal("refused change wrote an intake")
+	}
+}
+
+func TestEnvNeedsAnActiveChange(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if code := runEnv(t.TempDir()); code != 1 {
+		t.Fatalf("code = %d, want 1", code)
+	}
+}
+
+func repoCmd(root string, args ...string) int {
+	return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)
 }

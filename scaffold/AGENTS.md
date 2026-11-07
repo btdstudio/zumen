@@ -36,11 +36,13 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen switch [--all] [<change>]` | list changes (`--all` includes closed ones), or switch the active change |
 | `zumen source new\|list\|show` | manage `00_intake/` |
 | `zumen adr new\|list\|show` | manage `03_design/adr/` |
-| `zumen change new <title> [--repo]` | create a change + intake + switch |
+| `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate (earlier phases must be approved or skipped); `skipped` needs a reason |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
 | `zumen export [<change>] --to <tomo> [--force]` | copy a spec with an approved plan into a tomo workspace |
+| `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
+| `zumen env` | print harness flags (`--add-dir <path>`) for the active change's repos |
 | `zumen settings` | show/merge settings |
 | `zumen help` | usage |
 
@@ -50,8 +52,8 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 ## How to start a change
 
-1. **Create a change** — `zumen change new "Title"` (add `--repo <path>` for
-   existing-codebase work). This writes the intake (`00_intake/<id>.md`), makes
+1. **Create a change** — `zumen change new "Title"` (add `--repo <name>` for
+   each registered repo, or `--repo <path>` for a single unregistered one). This writes the intake (`00_intake/<id>.md`), makes
    a `specs/<n>-<slug>/` folder, seeds `STATE.json` (explore starts
    skipped unless you passed `--repo`), and switches to it.
 2. **Kick off** with a prompt like: *"Start the loop on `00_intake/1.md`."*
@@ -104,7 +106,8 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 ├── .gitattributes
 ├── STATE.json            # per-change phase, gates, sources (committed)
 ├── LOG.md                # gate history (committed)
-├── .zumen/               # settings + manifest (committed), active change (local)
+├── REPOS.json            # logical repos and remotes (committed)
+├── .zumen/               # settings + manifest (committed), active change + repo paths (local)
 ├── 00_intake/            # the base source (<id>.md)
 ├── 01_explore/           # explorer (skippable)
 ├── 02_requirements/      # analyst

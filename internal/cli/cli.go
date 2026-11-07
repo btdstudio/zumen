@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/btdstudio/kiso/repos"
 	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/zumen/internal/adr"
 	"github.com/btdstudio/zumen/internal/export"
@@ -46,6 +47,10 @@ func Run(args []string) int {
 		return runReopen(root, args[1:])
 	case "export":
 		return runExport(root, args[1:])
+	case "repo":
+		return repos.Run(root, "zumen", args[1:], os.Stdout, os.Stderr)
+	case "env":
+		return runEnv(root)
 	default:
 		fmt.Fprintf(os.Stderr, "zumen: unknown command %q\n", args[0])
 		PrintUsage()
@@ -72,6 +77,7 @@ Usage:
   zumen reopen <phase> --reason <r>        move back to a phase, clearing later approvals
   zumen export [<change>] --to <tomo> [--force]
                                            copy an approved spec into a tomo workspace
+` + repos.Usage("zumen") + `  zumen env                                print harness flags for the active change's repos
   zumen check                              validate the embedded scaffold
   zumen version                            print the version
   zumen help                               this help
@@ -186,16 +192,17 @@ func runChange(root string, args []string) int {
 		return runChangeClose(root, args[1:])
 	}
 	if len(args) == 0 || args[0] != "new" {
-		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <path>] [--rev <r>] [--body <b>]\n       zumen change close <change> --reason <r>")
+		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <name|path>]... [--rev <r>] [--body <b>]\n       zumen change close <change> --reason <r>")
 		return 1
 	}
 	args = args[1:]
-	var title, repo, rev, body string
+	var title, rev, body string
+	var repoArgs []string
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "--repo" && i+1 < len(args):
 			i++
-			repo = args[i]
+			repoArgs = append(repoArgs, args[i])
 		case a == "--rev" && i+1 < len(args):
 			i++
 			rev = args[i]
@@ -213,8 +220,17 @@ func runChange(root string, args []string) int {
 		}
 	}
 	if title == "" {
-		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <path>] [--rev <r>] [--body <b>]")
+		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <name|path>]... [--rev <r>] [--body <b>]")
 		return 1
+	}
+	registered, err := changeRepos(root, repoArgs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	repo := ""
+	if len(repoArgs) > 0 {
+		repo = repoArgs[0]
 	}
 	// Fail on unreadable state before writing the intake and spec folder.
 	if _, err := state.LoadState(root); err != nil {
@@ -244,7 +260,7 @@ func runChange(root string, args []string) int {
 	}
 	name := fmt.Sprintf("%d-%s", id, slug)
 	rel := filepath.ToSlash(filepath.Join(loaded.Effective.SourceDir, fmt.Sprintf("%d.md", created.ID)))
-	st, err := state.SeedChange(root, name, repo != "", []string{rel})
+	st, err := state.SeedChange(root, name, repo != "", []string{rel}, registered...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -254,6 +270,38 @@ func runChange(root string, args []string) int {
 		fmt.Printf("explore skipped: %s\n", state.NoRepoReason)
 	}
 	return 0
+}
+
+// changeRepos returns which --repo values are registered names. A single
+// unregistered value is still accepted as a path to the codebase; several repos
+// have to be registered, because a change can only track logical names.
+func changeRepos(root string, args []string) ([]string, error) {
+	reg, err := repos.Load(root, "zumen")
+	if err != nil {
+		return nil, err
+	}
+	var registered []string
+	for _, a := range args {
+		if _, ok := reg.Repos[a]; ok {
+			registered = append(registered, a)
+		} else if len(args) > 1 {
+			return nil, fmt.Errorf("zumen: %q isn't registered — run `zumen repo add` for each repo in a multi-repo change", a)
+		}
+	}
+	return registered, nil
+}
+
+func runEnv(root string) int {
+	st, err := state.LoadState(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if st.Name == "" {
+		fmt.Fprintln(os.Stderr, "zumen: no active change — run `zumen switch <change>` first")
+		return 1
+	}
+	return repos.RunEnv(root, "zumen", st.Repos, os.Stdout, os.Stderr)
 }
 
 func runChangeClose(root string, args []string) int {

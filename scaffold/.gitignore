@@ -1,5 +1,6 @@
 # The active change is local to each checkout; the rest of .zumen/ is shared
 .zumen/active
+.zumen/paths.json
 
 # OS noise
 .DS_Store

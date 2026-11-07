@@ -2,7 +2,7 @@
   "version": "dev",
   "files": {
     ".gitattributes": "c4ae2c5225b533e85ed20784f51c40fdf76ab261cb35d4df6c5467e08c67ef32",
-    ".gitignore": "44700d6c742153b7c941512c000c7623322a96c0275a4ae865af1b7f8ca821b1",
+    ".gitignore": "fe06bb03e18c5dd6eee9aac93a5825cf085a8dd16dd1d512af5a8d2354f52948",
     "00_intake/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "00_intake/context.md": "923feecde9d5bfe26ff9627182f029477deecd579e5e4aaee7ac2213f9a408ca",
     "01_explore/context.md": "e28a2c5f7662cc5b9abbc963163c3a092e2b18026e3f80304a8a289b2cb46198",
@@ -20,7 +20,7 @@
     "04_plan/context.md": "68d6084d07e8e6dc79322156fe54d6b06deaf611b2fb98262748f9f94a22d6f1",
     "04_plan/personas/architect.md": "6cbc426aa362449bf8fd66a69eacbe513660806a5fe51869f8516e1bdb259391",
     "04_plan/templates/tasks.md": "0656f14732e3e037e81d8ff93de1386ca0c9889f369b68ffc8b0c31fe891be8f",
-    "AGENTS.md": "73eedfc789e8f60987ebfe24271cbedef249756c41fdc9845a828480dad7b171",
+    "AGENTS.md": "4c2b9f392bcf85c6be24d33a9f7fe75ada99e3ff478122e5c0adc45f86a95df4",
     "CLAUDE.md": "b7e2c49d980126d99a4f2853bd6c40d216c7a710f0265d729de39aa692d8f25b",
     "README.md": "c98406fbc45049cffcc7439785d55cac7448c385460650236280b32c3d47a759",
     "specs/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"

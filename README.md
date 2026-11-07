@@ -32,11 +32,13 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 | `zumen switch [--all] [<change>]` | list changes, or switch the active change |
 | `zumen source new\|list\|show` | manage `00_intake/` |
 | `zumen adr new\|list\|show` | manage `03_design/adr/` |
-| `zumen change new <title> [--repo]` | create a change + intake + switch |
+| `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
 | `zumen export [<change>] --to <tomo> [--force]` | copy a spec with an approved plan into a tomo workspace |
+| `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
+| `zumen env` | print harness flags for the active change's repos |
 | `zumen check` | validate the embedded scaffold |
 | `zumen version` | print the version |
 | `zumen help` | usage |
@@ -64,7 +66,8 @@ commit `STATE.json` and `LOG.md` for you, without pushing.
 ├── AGENTS.md          root map + routing table + command list
 ├── STATE.json         per-change phase, gates, sources (committed)
 ├── LOG.md             gate history (committed)
-├── .zumen/            settings + manifest (committed), active change (local)
+├── REPOS.json         logical repos and remotes (committed)
+├── .zumen/            settings + manifest (committed), active change + repo paths (local)
 ├── 00_intake/         base source (<id>.md)
 ├── 01_explore/        explorer (skippable)
 ├── 02_requirements/   analyst
