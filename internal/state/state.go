@@ -1,15 +1,14 @@
-// Package state owns the zumen workspace contract: the STATE.json phase machine,
-// the LOG.md changeset, the local active-change pointer, and the top-level
-// specs/ dir.
+// Package state configures kiso's phase machine for zumen and migrates older
+// STATE.json files.
 //
-// The planning loop is intake → explore? → requirements → design → plan. Every
-// phase is gated; "explore" runs only when the active change's mode is
-// "existing" (the intake points at a real codebase).
+// The planning loop is intake → explore → requirements → design → plan. Every
+// phase is gated. Explore is skippable: `zumen change new` skips it unless the
+// intake points at a real codebase.
 //
 // Layout:
 //
-//	STATE.json         phase machine: { changes } maps each change folder to
-//	                   its own { phase, status, mode, gates, sources, updatedAt }
+//	STATE.json         phase machine: { schema, changes } maps each change folder
+//	                   to its own { phase, status, gates, sources, updatedAt }
 //	                   record — the single store, committed so approvals survive
 //	                   a clone. LoadState resolves the active record.
 //	LOG.md             one timestamped line per state change / gate (committed)
@@ -22,464 +21,165 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/btdstudio/kiso/changelog"
-	"github.com/btdstudio/kiso/workspace"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
+
+	kiso "github.com/btdstudio/kiso/state"
+	"github.com/btdstudio/kiso/workspace"
 )
 
-// PHASES is the gated planning loop in order. Explore is skipped for
-// greenfield changes but is always present in the machine.
-var PHASES = []string{"intake", "explore", "requirements", "design", "plan"}
+// Machine is the planning loop.
+var Machine = kiso.Machine{Tool: "zumen", Phases: []kiso.Phase{
+	{Name: "intake", Kind: kiso.Gated},
+	{Name: "explore", Kind: kiso.Gated, Skippable: true},
+	{Name: "requirements", Kind: kiso.Gated},
+	{Name: "design", Kind: kiso.Gated},
+	{Name: "plan", Kind: kiso.Gated},
+}}
 
-// GATE_STATES is the per-phase gate status. "" = not started.
-var GATE_STATES = []string{"", "draft", "await-approval", "approved"}
-
-// MODES is the set of change modes. "existing" means the intake points at a
-// real codebase, so the loop runs explore before requirements.
-var MODES = []string{"greenfield", "existing"}
+// NoRepoReason explains the explore skip that `zumen change new` records.
+const NoRepoReason = "no repo in the intake"
 
 // Now is the injectable clock used for timestamps (updatedAt and log lines).
 // Tests override it to make output deterministic.
 var Now = time.Now
 
-func isoMillis(t time.Time) string {
-	return t.UTC().Format("2006-01-02T15:04:05.000Z")
+var store = kiso.Store{
+	Machine:   Machine,
+	SpecsDir:  "specs",
+	Commit:    true,
+	Now:       func() time.Time { return Now() },
+	Migrate:   migrate,
+	Preflight: refuseOldLocation,
 }
 
-// Gates is the per-phase gate map. Field order matches PHASES order so
-// marshaling is stable.
-type Gates struct {
-	Intake       string `json:"intake"`
-	Explore      string `json:"explore"`
-	Requirements string `json:"requirements"`
-	Design       string `json:"design"`
-	Plan         string `json:"plan"`
-}
-
-// State is the resolved active machine (what LoadState returns).
-type State struct {
-	Phase     string
-	Status    string
-	Mode      string
-	Gates     Gates
-	Sources   []string
-	Change    string
-	UpdatedAt string
-}
-
-// changeRecord is the per-change phase-machine record stored in state.json.
-type changeRecord struct {
-	Phase   string   `json:"phase"`
-	Status  string   `json:"status"`
-	Mode    string   `json:"mode"`
-	Gates   Gates    `json:"gates"`
-	Sources []string `json:"sources"`
-	// UpdatedAt lives per change so branches touching different changes merge
-	// cleanly.
-	UpdatedAt string `json:"updatedAt"`
-}
-
-// stateFile is the on-disk STATE.json shape.
-type stateFile struct {
-	Changes map[string]*changeRecord `json:"changes"`
-}
+type (
+	// State is one change's machine.
+	State = kiso.Change
+	// KnownChange is one change folder annotated with any recorded progress.
+	KnownChange = kiso.KnownChange
+)
 
 func Workspace(root string) string  { return workspace.Dir(root, "zumen") }
-func StatePath(root string) string  { return filepath.Join(root, "STATE.json") }
+func StatePath(root string) string  { return store.StatePath(root) }
 func ActivePath(root string) string { return workspace.ActivePath(root, "zumen") }
-func SpecsDir(root string) string   { return filepath.Join(root, "specs") }
-func LogPath(root string) string    { return filepath.Join(root, "LOG.md") }
+func SpecsDir(root string) string   { return store.SpecsPath(root) }
+func LogPath(root string) string    { return store.LogPath(root) }
 
 // ChangeDir returns the path to one change folder. An empty change resolves to
 // the specs base itself (a guard for ad-hoc outputs when nothing is active).
-func ChangeDir(root, change string) string {
-	if change != "" {
-		return filepath.Join(SpecsDir(root), change)
-	}
-	return SpecsDir(root)
-}
+func ChangeDir(root, change string) string { return store.ChangeDir(root, change) }
 
 // ArtifactPath is an artifact inside a specific change folder.
 func ArtifactPath(root, change, name string) string {
 	return filepath.Join(ChangeDir(root, change), name)
 }
 
-var changeIDRe = regexp.MustCompile(`^(\d+)-`)
+// NextChangeId is the next sequential change id.
+func NextChangeId(root string) int { return store.NextID(root) }
 
-// changeNameRe is the strict grammar for an accepted change folder name: a
-// numeric id, a hyphen, then the kebab-case slug Slugify produces. SwitchTo
-// requires this so a name can never escape specs/ via `..` or a separator.
-var changeNameRe = regexp.MustCompile(`^(\d+)-[a-z0-9]+(?:-[a-z0-9]+)*$`)
+// Slugify lowercases to a short kebab-case slug.
+func Slugify(text string) string { return kiso.Slugify(text) }
 
-// NextChangeId is the next sequential change id: highest numeric `<id>-` prefix
-// under specs + 1.
-func NextChangeId(root string) int {
-	entries, err := os.ReadDir(SpecsDir(root))
-	if err != nil {
-		return 1
-	}
-	max := 0
-	for _, e := range entries {
-		if m := changeIDRe.FindStringSubmatch(e.Name()); m != nil {
-			if n, err := strconv.Atoi(m[1]); err == nil && n > max {
-				max = n
-			}
-		}
-	}
-	return max + 1
-}
-
-var slugNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-// Slugify lowercases to a short kebab-case slug so change folders read as
-// <id>-<slug>.
-func Slugify(text string) string {
-	s := strings.ToLower(text)
-	s = slugNonAlnum.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
-	r := []rune(s)
-	if len(r) > 40 {
-		s = string(r[:40])
-	}
-	return s
-}
-
-func DefaultState() State {
-	return State{
-		Mode:    "greenfield",
-		Gates:   Gates{},
-		Sources: []string{},
-	}
-}
-
-func normalizeSources(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
-func normalizeMode(m string) string {
-	for _, v := range MODES {
-		if v == m {
-			return m
-		}
-	}
-	return "greenfield"
-}
+// DefaultState is the machine when nothing is recorded.
+func DefaultState() State { return kiso.NewChange("") }
 
 // ReadActive returns the active change's name ("" when none is set).
 func ReadActive(root string) (string, error) { return workspace.ReadActive(root, "zumen") }
 
-func writeActive(root, name string) error { return workspace.WriteActive(root, "zumen", name) }
+// LoadState resolves the active machine.
+func LoadState(root string) (State, error) { return store.Load(root) }
 
-// resolve builds the machine for one change from its record (nil = fresh).
-func resolve(name string, rec *changeRecord) State {
-	st := DefaultState()
-	st.Change = name
-	if rec != nil {
-		if rec.Phase != "" {
-			st.Phase = rec.Phase
-		}
-		if rec.Status != "" {
-			st.Status = rec.Status
-		}
-		st.Mode = normalizeMode(rec.Mode)
-		st.Gates = rec.Gates
-		st.UpdatedAt = rec.UpdatedAt
-		if rec.Sources != nil {
-			st.Sources = append([]string{}, rec.Sources...)
-		}
-	}
-	return st
-}
+// SaveState writes the change's record and makes it the active change.
+func SaveState(root string, st *State) error { return store.Save(root, st) }
 
-// LoadState resolves the active machine. It returns DefaultState when nothing
-// is recorded, and errors when STATE.json cannot be parsed.
-func LoadState(root string) (State, error) {
-	changes, err := ReadChanges(root)
-	if err != nil {
-		return State{}, err
-	}
-	name, err := ReadActive(root)
-	if err != nil {
-		return State{}, err
-	}
-	return resolve(name, changes[name]), nil
-}
-
-// SaveState stamps updatedAt, writes the change's record to STATE.json
-// (preserving every other change's), and makes it the active change.
-func SaveState(root string, st *State) error {
-	st.UpdatedAt = isoMillis(Now())
-	st.Mode = normalizeMode(st.Mode)
-	if err := os.MkdirAll(Workspace(root), 0o755); err != nil {
-		return err
-	}
-	changes, err := ReadChanges(root)
-	if err != nil {
-		return err
-	}
-	changes[st.Change] = &changeRecord{
-		Phase:     st.Phase,
-		Status:    st.Status,
-		Mode:      st.Mode,
-		Gates:     st.Gates,
-		Sources:   normalizeSources(st.Sources),
-		UpdatedAt: st.UpdatedAt,
-	}
-	buf, err := json.MarshalIndent(stateFile{Changes: changes}, "", "  ")
-	if err != nil {
-		return err
-	}
-	buf = append(buf, '\n')
-	if err := os.WriteFile(StatePath(root), buf, 0o644); err != nil {
-		return err
-	}
-	return writeActive(root, st.Change)
-}
-
-// ReadChanges returns the per-change phase-machine records in STATE.json (empty
-// when absent). An unreadable or unparseable file is an error, never "no
-// changes": SaveState writes this map back, so treating it as empty would wipe
-// every recorded change.
-func ReadChanges(root string) (map[string]*changeRecord, error) {
-	p := StatePath(root)
-	data, err := os.ReadFile(p)
-	if err != nil {
-		if os.IsNotExist(err) {
-			legacy := filepath.Join(Workspace(root), "state.json")
-			if _, statErr := os.Stat(legacy); statErr == nil {
-				return nil, fmt.Errorf("zumen: found old %s — move it and .zumen/log.md to STATE.json and LOG.md at the workspace root, then run `zumen switch <change>`", legacy)
-			}
-			return map[string]*changeRecord{}, nil
-		}
-		return nil, fmt.Errorf("zumen: cannot read %s: %v", p, err)
-	}
-	var sf stateFile
-	if err := json.Unmarshal(data, &sf); err != nil {
-		return nil, fmt.Errorf("zumen: cannot parse %s: %v", p, err)
-	}
-	if sf.Changes == nil {
-		return map[string]*changeRecord{}, nil
-	}
-	return sf.Changes, nil
-}
-
-// KnownChange is one change folder annotated with any recorded progress.
-type KnownChange struct {
-	Name   string `json:"name"`
-	ID     int    `json:"id"`
-	Mode   string `json:"mode"`
-	Phase  string `json:"phase"`
-	Status string `json:"status"`
-	Gates  Gates  `json:"gates"`
-}
+// ReadChanges returns the recorded changes.
+func ReadChanges(root string) (map[string]*State, error) { return store.ReadChanges(root) }
 
 // KnownChanges lists the numbered folders under specs/ sorted by id.
-func KnownChanges(root string) ([]KnownChange, error) {
-	changes, err := ReadChanges(root)
-	if err != nil {
-		return nil, err
-	}
-	out := []KnownChange{}
-	entries, err := os.ReadDir(SpecsDir(root))
-	if err != nil {
-		return out, nil
-	}
-	for _, e := range entries {
-		name := e.Name()
-		m := changeIDRe.FindStringSubmatch(name)
-		if m == nil {
-			continue
-		}
-		id, _ := strconv.Atoi(m[1])
-		rec := changes[name]
-		kc := KnownChange{Name: name, ID: id, Mode: "greenfield", Gates: Gates{}}
-		if rec != nil {
-			kc.Phase = rec.Phase
-			kc.Status = rec.Status
-			kc.Mode = normalizeMode(rec.Mode)
-			kc.Gates = rec.Gates
-		}
-		out = append(out, kc)
-	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j-1].ID > out[j].ID; j-- {
-			out[j-1], out[j] = out[j], out[j-1]
-		}
-	}
-	return out, nil
+func KnownChanges(root string) ([]KnownChange, error) { return store.Known(root) }
+
+// SwitchTo points the workspace at a different change folder.
+func SwitchTo(root, name string) (State, error) { return store.Switch(root, name) }
+
+// SetGate starts the given phase and sets its status.
+func SetGate(st *State, phase, status, reason string) error {
+	return Machine.SetGate(st, phase, status, reason)
 }
 
-// SwitchTo points the workspace at a different change folder and resumes its
-// phase machine. The target folder must exist under specs/ and match the
-// strict change-name grammar (no `..`, no separators, no symlinks). Switching to
-// a recorded change only moves the local pointer, leaving STATE.json untouched.
-func SwitchTo(root, name string) (State, error) {
-	if !changeNameRe.MatchString(name) {
-		return State{}, fmt.Errorf(`zumen: unknown change "%s"`, name)
+// CheckGate reports whether setting phase to status respects the loop.
+func CheckGate(st State, phase, status string) error { return Machine.CheckGate(st, phase, status) }
+
+// SeedChange creates a change folder and records its initial machine, making it
+// the active change. Without a repo there's nothing to explore, so explore starts
+// skipped. Sources are committed with it, so a clone has what the record points
+// at.
+func SeedChange(root, name string, hasRepo bool, sources []string) (State, error) {
+	opts := kiso.SeedOptions{Sources: sources, Paths: sources}
+	if !hasRepo {
+		opts.Skip = map[string]string{"explore": NoRepoReason}
 	}
-	dir := ChangeDir(root, name)
-	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return State{}, fmt.Errorf(`zumen: unknown change "%s"`, name)
-	}
-	changes, err := ReadChanges(root)
-	if err != nil {
-		return State{}, err
-	}
-	st := resolve(name, changes[name])
-	if changes[name] != nil {
-		if err := writeActive(root, name); err != nil {
-			return State{}, err
-		}
-		return st, nil
-	}
-	if err := SaveState(root, &st); err != nil {
-		return State{}, err
-	}
-	return st, nil
+	return store.Seed(root, name, opts)
 }
 
-// SetGate advances the phase machine: starts the given phase and sets its
-// status. Every zumen phase is gated; statuses come from GATE_STATES. Validates
-// names only; CheckGate is the loop-order rule.
-func SetGate(st *State, phase, status string) error {
-	found := false
-	for _, p := range PHASES {
-		if p == phase {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return fmt.Errorf("unknown phase: %s", phase)
-	}
-	for _, s := range GATE_STATES {
-		if s == status {
-			st.Phase = phase
-			st.Status = status
-			switch phase {
-			case "intake":
-				st.Gates.Intake = status
-			case "explore":
-				st.Gates.Explore = status
-			case "requirements":
-				st.Gates.Requirements = status
-			case "design":
-				st.Gates.Design = status
-			case "plan":
-				st.Gates.Plan = status
-			}
-			return nil
-		}
-	}
-	return fmt.Errorf("unknown gate status: %s", status)
+// AdvanceGate sets a gate on the active change, logs it with any notes, and
+// commits.
+func AdvanceGate(root, phase, status, reason string, notes ...string) (State, error) {
+	return store.Advance(root, phase, status, reason, notes...)
 }
 
-// gateStatus returns one phase's gate status.
-func gateStatus(g Gates, phase string) string {
-	switch phase {
-	case "intake":
-		return g.Intake
-	case "explore":
-		return g.Explore
-	case "requirements":
-		return g.Requirements
-	case "design":
-		return g.Design
-	case "plan":
-		return g.Plan
-	}
-	return ""
-}
+// Reopen moves the active change back to a phase, logs it and commits.
+func Reopen(root, phase, reason string) (State, error) { return store.Reopen(root, phase, reason) }
 
-// CheckGate reports whether setting phase to status respects the loop: every
-// earlier phase must be approved, and explore only exists in existing mode.
-// Clearing a gate (status "") is always allowed. It returns the violation, or
-// nil; whether a violation blocks is the caller's policy (settings.Gates).
-func CheckGate(st State, phase, status string) error {
-	if status == "" {
-		return nil
-	}
-	if phase == "explore" && st.Mode != "existing" {
-		return fmt.Errorf("zumen: explore does not apply to %s changes", st.Mode)
-	}
-	for _, p := range PHASES {
-		if p == phase {
-			return nil
-		}
-		if p == "explore" && st.Mode != "existing" {
-			continue
-		}
-		if got := gateStatus(st.Gates, p); got != "approved" {
-			return fmt.Errorf("zumen: %s requires %s to be approved (currently %q)", phase, p, got)
-		}
-	}
-	return nil
-}
-
-// SeedChange creates a new change folder and records its initial machine
-// (phase intake, status draft) with the given mode and sources, making it the
-// active change.
-func SeedChange(root, name, mode string, sources []string) (State, error) {
-	if !changeNameRe.MatchString(name) {
-		return State{}, fmt.Errorf("zumen: invalid change name %q", name)
-	}
-	if err := os.MkdirAll(ChangeDir(root, name), 0o755); err != nil {
-		return State{}, err
-	}
-	// Git drops empty folders, and a clone needs this one for `zumen switch`.
-	if err := os.WriteFile(filepath.Join(ChangeDir(root, name), ".gitkeep"), nil, 0o644); err != nil {
-		return State{}, err
-	}
-	st := DefaultState()
-	st.Change = name
-	st.Mode = normalizeMode(mode)
-	st.Sources = normalizeSources(sources)
-	if err := SetGate(&st, "intake", "draft"); err != nil {
-		return State{}, err
-	}
-	if err := SaveState(root, &st); err != nil {
-		return State{}, err
-	}
-	return st, nil
-}
-
-// AdvanceGate loads the active machine, sets the given phase/status, saves, and
-// appends a log line. It errors when no change is active.
-func AdvanceGate(root, phase, status string) (State, error) {
-	st, err := LoadState(root)
-	if err != nil {
-		return State{}, err
-	}
-	if st.Change == "" {
-		return State{}, fmt.Errorf("zumen: no active change — run `zumen switch <change>` first")
-	}
-	// The pointer is local, so a branch switch can leave it naming a change that
-	// doesn't exist here.
-	if _, err := os.Stat(ChangeDir(root, st.Change)); err != nil {
-		return State{}, fmt.Errorf("zumen: active change %q has no folder under specs/ — run `zumen switch <change>`", st.Change)
-	}
-	if err := SetGate(&st, phase, status); err != nil {
-		return State{}, err
-	}
-	if err := SaveState(root, &st); err != nil {
-		return State{}, err
-	}
-	if err := AppendLog(root, st.Change+": "+phase+" → "+status); err != nil {
-		return State{}, err
-	}
-	return st, nil
+// CloseChange closes a change by name, logs it and commits.
+func CloseChange(root, name, reason string) (State, error) {
+	return store.CloseChange(root, name, reason)
 }
 
 // AppendLog appends one timestamped line to LOG.md.
-func AppendLog(root, line string) error {
-	return changelog.Append(LogPath(root), Now(), line)
+func AppendLog(root, line string) error { return store.Log(root, line) }
+
+// migrate upgrades a pre-schema STATE.json, whose changes carried a `mode`. A
+// change that wasn't "existing" never ran explore, so explore becomes skipped; an
+// "existing" change still has to finish it. Approvals carry over as they are.
+func migrate(data []byte) ([]byte, error) {
+	var old struct {
+		Changes map[string]map[string]any `json:"changes"`
+	}
+	if err := json.Unmarshal(data, &old); err != nil {
+		return nil, err
+	}
+	for _, rec := range old.Changes {
+		if rec == nil {
+			continue
+		}
+		mode, _ := rec["mode"].(string)
+		delete(rec, "mode")
+		if mode == "existing" {
+			continue
+		}
+		gates, _ := rec["gates"].(map[string]any)
+		if gates == nil {
+			gates = map[string]any{}
+			rec["gates"] = gates
+		}
+		if explore, _ := gates["explore"].(string); explore == "" {
+			gates["explore"] = kiso.Skipped
+		}
+	}
+	return json.Marshal(map[string]any{"schema": kiso.Schema, "changes": old.Changes})
+}
+
+// refuseOldLocation stops a workspace from an earlier version, which kept its
+// state under .zumen/, from silently looking empty.
+func refuseOldLocation(root string) error {
+	if _, err := os.Stat(filepath.Join(root, "STATE.json")); err == nil {
+		return nil
+	}
+	legacy := filepath.Join(Workspace(root), "state.json")
+	if _, err := os.Stat(legacy); err == nil {
+		return fmt.Errorf("zumen: found old %s — move it and .zumen/log.md to STATE.json and LOG.md at the workspace root, then run `zumen switch <change>`", legacy)
+	}
+	return nil
 }

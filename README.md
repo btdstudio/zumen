@@ -27,13 +27,15 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 |---|---|
 | `zumen init [dir]` | scaffold the planning ICM structure |
 | `zumen update` | refresh managed files to the installed version |
-| `zumen status` | show the active change's mode/phase/status |
+| `zumen status` | show the active change's phase/status |
 | `zumen settings` | show/merge settings |
-| `zumen switch <change>` | switch the active change |
+| `zumen switch [--all] [<change>]` | list changes, or switch the active change |
 | `zumen source new\|list\|show` | manage `00_intake/` |
 | `zumen adr new\|list\|show` | manage `03_design/adr/` |
 | `zumen change new <title> [--repo]` | create a change + intake + switch |
-| `zumen gate <phase> <status> [--force]` | advance the active change's gate |
+| `zumen change close <change> --reason <r>` | close a change |
+| `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
+| `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
 | `zumen export [<change>] --to <tomo> [--force]` | copy a spec with an approved plan into a tomo workspace |
 | `zumen check` | validate the embedded scaffold |
 | `zumen version` | print the version |
@@ -44,25 +46,27 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 A change flows through five gated phases, each owned by a persona:
 
 1. **intake** — define the base source (an issue/idea, or a repo pointer).
-2. **explore** *(existing mode only)* — findings report for a real codebase.
+2. **explore** *(skippable)* — findings report for a real codebase.
 3. **requirements** (analyst) — turn the source into an unambiguous spec.
 4. **design** (architect) — the smallest solution + ADRs.
 5. **plan** (architect) — dependency-ordered tasks.
 
 Each phase stops at a gate for your approval. With the default `gates: block`
-setting, `zumen gate` refuses a phase until the earlier ones are approved, and
+setting, `zumen gate` refuses a phase until the earlier ones are approved or
+skipped, and
 `zumen export` refuses a change whose plan isn't approved. `--force` overrides
-this and records it in `LOG.md`; `prompt` and `auto` warn instead.
+this and records it in `LOG.md`; `prompt` and `auto` warn instead. State changes
+commit `STATE.json` and `LOG.md` for you, without pushing.
 
 ## The workspace
 
 ```
 ├── AGENTS.md          root map + routing table + command list
-├── STATE.json         per-change phase, mode, gates, sources (committed)
+├── STATE.json         per-change phase, gates, sources (committed)
 ├── LOG.md             gate history (committed)
 ├── .zumen/            settings + manifest (committed), active change (local)
 ├── 00_intake/         base source (<id>.md)
-├── 01_explore/        explorer (existing mode only)
+├── 01_explore/        explorer (skippable)
 ├── 02_requirements/   analyst
 ├── 03_design/         architect + adr/
 ├── 04_plan/           architect

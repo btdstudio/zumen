@@ -1,7 +1,7 @@
 # 01_explore — Explorer room
 
-Owns the **explore** phase, which runs only for changes whose `mode` is
-`existing` (the intake points at a real codebase).
+Owns the **explore** phase, for changes whose intake points at a real codebase.
+It's skippable: `zumen change new` skips it when there's no repo.
 
 ## Persona
 - `personas/explorer.md` — reads the target system and writes a findings report

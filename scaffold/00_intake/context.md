@@ -16,8 +16,9 @@ rev: <branch/sha>      # optional pin
 ```
 
 ## When `source: repo`
-Set the change's `mode` to `existing` in `STATE.json` so the loop runs
-`explore` before `requirements`.
+The loop runs `explore` before `requirements`. `zumen change new --repo` sets
+this up. If a change started without a repo, bring explore back with
+`zumen reopen explore --reason <r>`.
 
 ## Gate
 Stop after defining the source and hand control back for approval.
