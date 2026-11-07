@@ -58,7 +58,8 @@ setting, `zumen gate` refuses a phase until the earlier ones are approved or
 skipped, and
 `zumen export` refuses a change whose plan isn't approved. `--force` overrides
 this and records it in `LOG.md`; `prompt` and `auto` warn instead. State changes
-commit `STATE.json` and `LOG.md` for you, without pushing.
+commit `STATE.json` and `LOG.md` for you, without pushing, and gates also commit the
+change's spec folder.
 
 ## The workspace
 
