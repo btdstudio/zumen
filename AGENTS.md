@@ -4,7 +4,9 @@ This file applies to agents working on the zumen repo itself.
 
 ## Non-negotiable rules
 
-- Go >= 1.22, standard library only — no third-party runtime or build deps.
+- Go >= 1.22, standard library only — no third-party runtime or build deps. The
+  one exception is first-party: [kiso](https://github.com/btdstudio/kiso), the
+  shared core.
   `go test ./...` must stay green from a clean checkout.
 - The ICM scaffold is the embedded content store: `scaffold/`, embedded via
   `//go:embed all:scaffold` (`embed.go`). Edit the scaffold there; `zumen check`
@@ -20,13 +22,12 @@ This file applies to agents working on the zumen repo itself.
 scaffold/           the embedded planning ICM template (copied out by `zumen init`)
 embed.go            //go:embed all:scaffold
 cmd/zumen/          the CLI dispatch (init, update, check, helpers)
-internal/icm/       the scaffold/update/check engine
+internal/icm/       kiso scaffold engine config: embedded tree, seeds
 internal/state/     STATE.json phase machine, LOG.md, active-change pointer
-internal/settings/  mergeable settings (global ← project)
+internal/settings/  settings shape, merged through kiso (global ← project)
 internal/source/    intake store (frontmatter, sequential ids)
 internal/adr/       ADR store (numbered, immutable)
 internal/export/    copy a spec into a tomo workspace
-internal/version/   version reporting (build info)
 internal/cli/       helper subcommands (status, settings, switch, source, adr, change, gate)
 testdata/golden/    byte-identity fixtures (icm/manifest.json)
 ```

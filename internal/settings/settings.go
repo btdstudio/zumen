@@ -1,19 +1,11 @@
-// Package settings owns zumen's mergeable settings: global
-// (~/.config/zumen/settings.json) then project (.zumen/settings.json); the
-// project supersedes the global. Effective settings = defaults ← global ←
-// project.
+// Package settings defines zumen's settings shape and merges it through kiso:
+// effective settings = defaults ← global (~/.config/zumen/settings.json) ←
+// project (.zumen/settings.json).
 package settings
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/btdstudio/zumen/internal/state"
+	core "github.com/btdstudio/kiso/settings"
 )
-
-var VALID_GATES = []string{"block", "prompt", "auto"}
 
 // Settings is the effective settings shape.
 type Settings struct {
@@ -22,6 +14,16 @@ type Settings struct {
 	SourceDir   string `json:"sourceDir"`
 	ArtifactDir string `json:"artifactDir"`
 	AdrDir      string `json:"adrDir"`
+}
+
+// Loaded is the result of LoadSettings.
+type Loaded = core.Loaded[Settings]
+
+var spec = core.Spec[Settings]{
+	Tool:     "zumen",
+	Defaults: DefaultSettings,
+	Apply:    apply,
+	Validate: func(s *Settings) error { return core.CheckGates("zumen", s.Gates) },
 }
 
 func DefaultSettings() Settings {
@@ -34,53 +36,11 @@ func DefaultSettings() Settings {
 	}
 }
 
-func GlobalSettingsPath() string {
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			base = ""
-		} else {
-			base = filepath.Join(home, ".config")
-		}
+func apply(s *Settings, key string, value any) {
+	val, ok := value.(string)
+	if !ok {
+		return
 	}
-	return filepath.Join(base, "zumen", "settings.json")
-}
-
-func ProjectSettingsPath(root string) string {
-	return filepath.Join(state.Workspace(root), "settings.json")
-}
-
-// ReadIfExists parses a JSON object file, returning an empty map when absent.
-func ReadIfExists(file string) (map[string]any, error) {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]any{}, nil
-		}
-		return nil, err
-	}
-	var parsed any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("zumen: cannot parse settings %s: %v", file, err)
-	}
-	m, ok := parsed.(map[string]any)
-	if !ok || m == nil {
-		return nil, fmt.Errorf("zumen: settings must be a JSON object: %s", file)
-	}
-	return m, nil
-}
-
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-func stringField(s *Settings, key, val string) {
 	switch key {
 	case "baseSource":
 		s.BaseSource = val
@@ -95,45 +55,14 @@ func stringField(s *Settings, key, val string) {
 	}
 }
 
+func GlobalSettingsPath() string { return spec.GlobalPath() }
+
+func ProjectSettingsPath(root string) string { return spec.ProjectPath(root) }
+
+// ReadIfExists parses a JSON object file, returning an empty map when absent.
+func ReadIfExists(file string) (map[string]any, error) { return spec.ReadIfExists(file) }
+
 // MergeSettings overlays the raw layers (global then project) over defaults.
-// Layers are raw JSON objects so a present-but-empty value still overrides.
-func MergeSettings(layers ...map[string]any) (Settings, error) {
-	out := DefaultSettings()
-	for _, layer := range layers {
-		for key, value := range layer {
-			if value == nil {
-				continue
-			}
-			if s, ok := value.(string); ok {
-				stringField(&out, key, s)
-			}
-		}
-	}
-	if !contains(VALID_GATES, out.Gates) {
-		return Settings{}, fmt.Errorf("zumen: invalid gates %q (expected block|prompt|auto)", out.Gates)
-	}
-	return out, nil
-}
+func MergeSettings(layers ...map[string]any) (Settings, error) { return spec.Merge(layers...) }
 
-// Loaded is the result of LoadSettings.
-type Loaded struct {
-	Global    map[string]any
-	Project   map[string]any
-	Effective Settings
-}
-
-func LoadSettings(root string) (Loaded, error) {
-	global, err := ReadIfExists(GlobalSettingsPath())
-	if err != nil {
-		return Loaded{}, err
-	}
-	project, err := ReadIfExists(ProjectSettingsPath(root))
-	if err != nil {
-		return Loaded{}, err
-	}
-	effective, err := MergeSettings(global, project)
-	if err != nil {
-		return Loaded{}, err
-	}
-	return Loaded{Global: global, Project: project, Effective: effective}, nil
-}
+func LoadSettings(root string) (Loaded, error) { return spec.Load(root) }
