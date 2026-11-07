@@ -76,12 +76,16 @@ change's folders under `specs/`, `01_research/` and `02_explore/`.
 ├── 03_spec/           analyst
 ├── 04_architecture/   architect + adr/
 ├── 05_breakdown/      architect
+├── 06_publish/        publisher + sync.md
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
 
 ## Handoff
 
-Tickets are the only interface out of a workspace. They're local markdown until
+Tickets are the only interface out of a workspace. Publishing them is agent work:
+`06_publish/sync.md` tells an agent how to talk to your PM tool, and the CLI never
+calls one. A GitHub Issues starter ships in `06_publish/sync-examples/`.
+ They're local markdown until
 published; then the PM tool owns them, and the file is a frozen snapshot. A coding
 agent picks one up from there, in [tomo](https://github.com/btdstudio/tomo) or any
 other harness.

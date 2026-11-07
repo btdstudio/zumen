@@ -9,6 +9,7 @@ team, or a coding agent in tomo, can pick up one at a time.
 - Give every story and task the one repo it lands in.
 - Record order with `depends_on`, and cite the spec and ADRs in the ticket's context.
 - Write acceptance criteria as Given/When/Then checkboxes, then set `status: ready`.
+  A draft can't be published.
 - Run `zumen tickets check` until it's clean.
 
 ## Guardrails

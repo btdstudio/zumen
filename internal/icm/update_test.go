@@ -261,3 +261,20 @@ func TestMigrateRoomsLeavesARoomWhoseNameIsTaken(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSyncFileEditsSurviveUpdate(t *testing.T) {
+	dir := scaffoldWorkspace(t)
+	sync := filepath.Join(dir, "06_publish", "sync.md")
+	if err := os.WriteFile(sync, []byte("my instructions"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Update(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(sync); string(got) != "my instructions" {
+		t.Fatalf("sync.md clobbered: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "06_publish", "sync-examples", "github.md")); err != nil {
+		t.Fatal(err)
+	}
+}

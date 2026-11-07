@@ -299,6 +299,9 @@ func ticketsMarkPublished(root string, args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if t.Status == ticket.StatusDraft {
+		return 0, fmt.Errorf("zumen: %s is a draft — set status: ready before publishing it", id)
+	}
 	if err := t.MarkPublished(tool, itemID); err != nil {
 		return 0, fmt.Errorf("zumen: %v", err)
 	}

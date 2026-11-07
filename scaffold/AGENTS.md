@@ -79,6 +79,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 | Write the spec | `03_spec/` | analyst | `03_spec/context.md`, `00_intake/*`, `01_research/<n>-<slug>/*`, `02_explore/<n>-<slug>/*` | the repos |
 | Design the architecture | `04_architecture/` | architect | `04_architecture/context.md`, `specs/<n>-<slug>/functional-spec.md`, `02_explore/<n>-<slug>/*` | the repos |
 | Break down into tickets | `05_breakdown/` | architect | `05_breakdown/context.md`, `specs/<n>-<slug>/functional-spec.md`, `specs/<n>-<slug>/architecture.md` | the repos |
+| Publish tickets | `06_publish/` | publisher | `06_publish/context.md`, `06_publish/sync.md`, `specs/<n>-<slug>/tickets/*` | the repos, `01_research/*`, `02_explore/*` |
 
 ## Naming conventions
 
@@ -89,6 +90,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 - Research: `01_research/<n>-<slug>/<topic>.md`
 - Findings: `02_explore/<n>-<slug>/<repo>.md`, `02_explore/<n>-<slug>/synthesis.md`
 - ADRs: `04_architecture/adr/NNNN-<slug>.md`
+- Sync instructions: `06_publish/sync.md`, with starters in `06_publish/sync-examples/`
 - Personas: `<stage>/personas/<name>.md`
 - Templates: `<stage>/templates/<artifact>.md`
 
@@ -132,6 +134,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 ├── 03_spec/              # analyst
 ├── 04_architecture/      # architect + adr/
 ├── 05_breakdown/         # architect
+├── 06_publish/           # publisher + sync.md
 └── specs/                # per-change artifacts and tickets (<n>-<slug>/)
 ```
 

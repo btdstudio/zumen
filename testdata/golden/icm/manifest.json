@@ -21,11 +21,15 @@
     "04_architecture/templates/adr.md": "5587205be6f92daf1250d1f197ea78db48dd24ee66d03232de8872b804784b4f",
     "04_architecture/templates/architecture.md": "a3fb209f3167ea66e4c3ade0cea742b339aa680a30cd8fe79c7cc7a8506f1259",
     "05_breakdown/context.md": "2c10104f2729d12429c3d33a266ec0a758c3db19d40cb373b3d466e7b99d1103",
-    "05_breakdown/personas/architect.md": "58064d912bc87455677a1e5f4b3aebc6ba8e788b32637b1fa86091d7aa0ab626",
+    "05_breakdown/personas/architect.md": "05fb8c8d05c2133a5d84067a92b9d39ffe38b1eab03488111eba1a9e3df9357b",
     "05_breakdown/templates/ticket.md": "be7be394b779afff443fdebf6c4ceee0dd441859cafed5f74c13f6a7f496adbd",
-    "AGENTS.md": "f0495d5b684585cc9d3459a120cb0937c10a8d82e747db51b9cf40a441395249",
+    "06_publish/context.md": "969a6c4745b16856788ad61d02c66d3c27e5b637cc04b1d30cbb03f1372d9ab8",
+    "06_publish/personas/publisher.md": "0d31b5a94b07861603b2eb6a745105e7ee834a0e7fdc3c3b6cdd2bc5b905619e",
+    "06_publish/sync-examples/github.md": "9f09fb1c274665093d9af7d88c12e4934f1dd5c903301b1e834506d12defec36",
+    "06_publish/sync.md": "47194ca86ac7d14387cb07ef8bda5c511d4ed0d0958ef7a1a77cd5465dbd3211",
+    "AGENTS.md": "36676c6584f2e95c09ae6c019813c6fb6aaa6cd32210a0761c859480c253f942",
     "CLAUDE.md": "b7e2c49d980126d99a4f2853bd6c40d216c7a710f0265d729de39aa692d8f25b",
-    "README.md": "ad86d4aa6387306d97ed1053bf5c67c0536f7d9fd887c855847042b670e9a0d0",
+    "README.md": "d5a0d59409d812fd4182797820d6ef1d9b4dcefd2e4ff012945bd68472ee9b4d",
     "specs/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }
 }
