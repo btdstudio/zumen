@@ -4,7 +4,7 @@ Owns the **requirements** phase. Turns a vague base source into unambiguous,
 verifiable requirements. Does not design or implement.
 
 ## How
-- Read `00_intake/*` (and `01_explore/findings/*` in existing mode) and distil —
+- Read `00_intake/*` (and `01_explore/findings/*` if explore ran) and distil —
   never restate the source verbatim.
 - Interview tightly: goal, audience, boundaries, priorities, and what "done"
   looks like. Record each question and its resolution.

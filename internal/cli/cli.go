@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/zumen/internal/adr"
 	"github.com/btdstudio/zumen/internal/export"
 	"github.com/btdstudio/zumen/internal/settings"
@@ -41,6 +42,8 @@ func Run(args []string) int {
 		return runChange(root, args[1:])
 	case "gate":
 		return runGate(root, args[1:])
+	case "reopen":
+		return runReopen(root, args[1:])
 	case "export":
 		return runExport(root, args[1:])
 	default:
@@ -59,11 +62,14 @@ Usage:
   zumen update                             refresh managed files
   zumen status                             show the active change
   zumen settings                           show effective settings
-  zumen switch <change>                    switch the active change
+  zumen switch [--all] [<change>]          list changes, or switch the active one
   zumen source new|list|show [args]        manage 00_intake/
   zumen adr new|list|show [args]           manage 03_design/adr/
   zumen change new <title> [--repo <p>]    create a change + intake + switch
-  zumen gate <phase> <status> [--force]    advance the active change's gate
+  zumen change close <change> --reason <r> close a change
+  zumen gate <phase> <status> [--reason <r>] [--force]
+                                           advance the active change's gate
+  zumen reopen <phase> --reason <r>        move back to a phase, clearing later approvals
   zumen export [<change>] --to <tomo> [--force]
                                            copy an approved spec into a tomo workspace
   zumen check                              validate the embedded scaffold
@@ -78,23 +84,25 @@ func runStatus(root string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if st.Change == "" {
+	if st.Name == "" {
 		fmt.Println("no active change")
 		return 0
 	}
-	fmt.Printf("change:   %s\n", st.Change)
-	fmt.Printf("mode:     %s\n", st.Mode)
+	fmt.Printf("change:   %s\n", st.Name)
 	fmt.Printf("phase:    %s\n", st.Phase)
 	fmt.Printf("status:   %s\n", st.Status)
-	fmt.Printf("gates:    intake=%s explore=%s requirements=%s design=%s plan=%s\n",
-		st.Gates.Intake, st.Gates.Explore, st.Gates.Requirements, st.Gates.Design, st.Gates.Plan)
-	warnModeMismatch(root, st)
+	var gates []string
+	for _, p := range state.Machine.Phases {
+		gates = append(gates, p.Name+"="+st.Gates[p.Name])
+	}
+	fmt.Printf("gates:    %s\n", strings.Join(gates, " "))
+	warnSkippedExplore(root, st)
 	return 0
 }
 
-// warnModeMismatch warns when a change's intake is a repo but its mode is not
-// "existing" (which would silently skip the explore phase).
-func warnModeMismatch(root string, st state.State) {
+// warnSkippedExplore warns when a change's intake is a repo but its explore phase
+// is skipped.
+func warnSkippedExplore(root string, st state.State) {
 	for _, src := range st.Sources {
 		dir := filepath.Dir(src)
 		base := filepath.Base(src)
@@ -106,8 +114,8 @@ func warnModeMismatch(root string, st state.State) {
 		if err != nil {
 			continue
 		}
-		if s.Source == source.SOURCE_REPO && st.Mode != "existing" {
-			fmt.Fprintf(os.Stderr, "warning: source #%d is a repo (%s) but mode is %q — the explore phase will be skipped\n", id, s.Title, st.Mode)
+		if s.Source == source.SOURCE_REPO && st.Gates["explore"] == kiso.Skipped {
+			fmt.Fprintf(os.Stderr, "warning: source #%d is a repo (%s) but the explore phase is skipped\n", id, s.Title)
 		}
 	}
 }
@@ -128,6 +136,10 @@ func runSettings(root string) int {
 }
 
 func runSwitch(root string, args []string) int {
+	all := len(args) > 0 && args[0] == "--all"
+	if all {
+		args = args[1:]
+	}
 	if len(args) == 0 {
 		changes, err := state.KnownChanges(root)
 		if err != nil {
@@ -139,7 +151,10 @@ func runSwitch(root string, args []string) int {
 			return 0
 		}
 		for _, c := range changes {
-			fmt.Printf("%s  [%s] %s\n", c.Name, c.Mode, c.Phase)
+			if c.Status == kiso.Closed && !all {
+				continue
+			}
+			fmt.Printf("%s  %s %s\n", c.Name, c.Phase, c.Status)
 		}
 		return 0
 	}
@@ -148,7 +163,7 @@ func runSwitch(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("switched to %s\n", st.Change)
+	fmt.Printf("switched to %s\n", st.Name)
 	return 0
 }
 
@@ -167,8 +182,11 @@ func gatePolicy(root string, violation error, force bool) error {
 }
 
 func runChange(root string, args []string) int {
+	if len(args) > 0 && args[0] == "close" {
+		return runChangeClose(root, args[1:])
+	}
 	if len(args) == 0 || args[0] != "new" {
-		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <path>] [--rev <r>] [--body <b>]")
+		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <path>] [--rev <r>] [--body <b>]\n       zumen change close <change> --reason <r>")
 		return 1
 	}
 	args = args[1:]
@@ -209,10 +227,8 @@ func runChange(root string, args []string) int {
 		return 1
 	}
 	src := source.SOURCE_ISSUE
-	mode := "greenfield"
 	if repo != "" {
 		src = source.SOURCE_REPO
-		mode = "existing"
 	}
 	created, err := source.WriteNewSource(root, loaded.Effective.SourceDir, source.NewSourceOptions{
 		Title: title, Source: src, Repo: repo, Rev: rev, Body: body,
@@ -228,27 +244,56 @@ func runChange(root string, args []string) int {
 	}
 	name := fmt.Sprintf("%d-%s", id, slug)
 	rel := filepath.ToSlash(filepath.Join(loaded.Effective.SourceDir, fmt.Sprintf("%d.md", created.ID)))
-	st, err := state.SeedChange(root, name, mode, []string{rel})
+	st, err := state.SeedChange(root, name, repo != "", []string{rel})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("created change %s [%s] (source #%d)\n", st.Change, st.Mode, created.ID)
+	fmt.Printf("created change %s (source #%d)\n", st.Name, created.ID)
+	if repo == "" {
+		fmt.Printf("explore skipped: %s\n", state.NoRepoReason)
+	}
 	return 0
 }
 
-func runGate(root string, args []string) int {
-	force := false
-	var pos []string
-	for _, a := range args {
-		if a == "--force" {
+func runChangeClose(root string, args []string) int {
+	pos, reason, _, err := parseTransition(args)
+	if err != nil || len(pos) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: zumen change close <change> --reason <r>")
+		return 1
+	}
+	st, err := state.CloseChange(root, pos[0], reason)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%s: closed\n", st.Name)
+	return 0
+}
+
+// parseTransition splits positional arguments from --reason and --force.
+func parseTransition(args []string) (pos []string, reason string, force bool, err error) {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--force":
 			force = true
-		} else {
+		case a == "--reason" && i+1 < len(args):
+			i++
+			reason = args[i]
+		case strings.HasPrefix(a, "-"):
+			return nil, "", false, fmt.Errorf("unknown flag %q", a)
+		default:
 			pos = append(pos, a)
 		}
 	}
-	if len(pos) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: zumen gate <phase> <status> [--force]")
+	return pos, reason, force, nil
+}
+
+func runGate(root string, args []string) int {
+	usage := "usage: zumen gate <phase> <status> [--reason <r>] [--force]"
+	pos, reason, force, err := parseTransition(args)
+	if err != nil || len(pos) != 2 {
+		fmt.Fprintln(os.Stderr, usage)
 		return 1
 	}
 	phase, status := pos[0], pos[1]
@@ -257,32 +302,42 @@ func runGate(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	var violation error
-	if st.Change != "" {
+	var notes []string
+	if st.Name != "" {
 		probe := st
-		if err := state.SetGate(&probe, phase, status); err != nil {
+		if err := state.SetGate(&probe, phase, status, reason); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		if violation = state.CheckGate(st, phase, status); violation != nil {
+		if violation := state.CheckGate(st, phase, status); violation != nil {
 			if err := gatePolicy(root, violation, force); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return 1
 			}
+			notes = append(notes, "override: "+violation.Error())
 		}
 	}
-	st, err = state.AdvanceGate(root, phase, status)
+	st, err = state.AdvanceGate(root, phase, status, reason, notes...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	if violation != nil {
-		if err := state.AppendLog(root, st.Change+": override: "+violation.Error()); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
+	fmt.Printf("%s: %s = %s\n", st.Name, st.Phase, st.Status)
+	return 0
+}
+
+func runReopen(root string, args []string) int {
+	pos, reason, _, err := parseTransition(args)
+	if err != nil || len(pos) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: zumen reopen <phase> --reason <r>")
+		return 1
 	}
-	fmt.Printf("%s: %s = %s\n", st.Change, st.Phase, st.Status)
+	st, err := state.Reopen(root, pos[0], reason)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%s: %s = %s\n", st.Name, st.Phase, st.Status)
 	return 0
 }
 
@@ -316,11 +371,11 @@ func runExport(root string, args []string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
-		if st.Change == "" {
+		if st.Name == "" {
 			fmt.Fprintln(os.Stderr, "zumen export: no active change — pass <change> or run `zumen switch <change>`")
 			return 1
 		}
-		change = st.Change
+		change = st.Name
 	}
 	changes, err := state.ReadChanges(root)
 	if err != nil {
@@ -328,7 +383,7 @@ func runExport(root string, args []string) int {
 		return 1
 	}
 	var violation error
-	if rec := changes[change]; rec == nil || rec.Gates.Plan != "approved" {
+	if rec := changes[change]; rec == nil || rec.Gates["plan"] != kiso.Approved {
 		violation = fmt.Errorf("zumen: the plan for %s is not approved", change)
 		if err := gatePolicy(root, violation, force); err != nil {
 			fmt.Fprintln(os.Stderr, err)

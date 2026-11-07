@@ -23,18 +23,18 @@ scaffold/           the embedded planning ICM template (copied out by `zumen ini
 embed.go            //go:embed all:scaffold
 cmd/zumen/          the CLI dispatch (init, update, check, helpers)
 internal/icm/       kiso scaffold engine config: embedded tree, seeds
-internal/state/     STATE.json phase machine, LOG.md, active-change pointer
+internal/state/     kiso phase machine config, old STATE.json migration
 internal/settings/  settings shape, merged through kiso (global ← project)
 internal/source/    intake store (frontmatter, sequential ids)
 internal/adr/       ADR store (numbered, immutable)
 internal/export/    copy a spec into a tomo workspace
-internal/cli/       helper subcommands (status, settings, switch, source, adr, change, gate)
+internal/cli/       helper subcommands (status, settings, switch, source, adr, change, gate, reopen)
 testdata/golden/    byte-identity fixtures (icm/manifest.json)
 ```
 
 ## Process
 
-- Intake before requirements; explore (existing mode) before requirements;
+- Intake before requirements; explore (unless skipped) before requirements;
   requirements before design; design before plan.
 - `zumen init` scaffolds a project; `zumen update` refreshes its managed files.
 

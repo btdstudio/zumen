@@ -7,7 +7,7 @@ Owns the **requirements** phase.
 
 ## Input (read)
 - `00_intake/<id>.md` — the base source
-- `01_explore/findings/<n>-<slug>.md` — findings (existing mode only)
+- `01_explore/findings/<n>-<slug>.md` — findings (if explore ran)
 - `templates/requirements.md` — skeleton
 
 ## Output (write)

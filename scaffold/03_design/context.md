@@ -7,7 +7,7 @@ Owns the **design** phase and the ADR store.
 
 ## Input (read)
 - `specs/<n>-<slug>/requirements.md` — approved requirements
-- `01_explore/findings/<n>-<slug>.md` — findings (existing mode only)
+- `01_explore/findings/<n>-<slug>.md` — findings (if explore ran)
 - `templates/design.md` — skeleton
 
 ## Output (write)
