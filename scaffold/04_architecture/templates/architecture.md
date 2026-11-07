@@ -1,8 +1,8 @@
-# Design — <short name>
+# Architecture — <short name>
 
 - **Status:** draft | await-approval | approved
 - **Date:** <ISO date>
-- **Designing for:** `specs/<n>-<slug>/requirements.md`
+- **Designing for:** `specs/<n>-<slug>/functional-spec.md`
 
 ## Overview
 

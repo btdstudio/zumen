@@ -6,23 +6,29 @@ here; this file is harness-agnostic and the single source of truth.
 
 ## The loop
 
-A change flows through five gated phases, each owned by a persona. The
-`explore` phase is skippable: `zumen change new` skips it unless the source is a
-real codebase, and you can skip it or bring it back yourself.
+A change is an initiative, often across many repos, and ends in tickets. It flows
+through eight phases, each owned by a persona. Research, explore and synthesis are
+skippable, with a reason. `zumen change new` skips explore when there's no repo, and
+synthesis when there are fewer than two.
 
-`intake → [explore] → requirements → design → plan`
+`intake → [research] → [explore] → [synthesis] → spec → architecture → breakdown → publish`
 
-- **intake** — define the base source: a prose issue/idea, or a pointer to an
-  existing codebase (repo path/url + rev).
-- **explore** *(skippable)* — read the target system and write a
-  findings report (system map, entry points, module responsibilities, data flow,
-  cited `file:line`, debt/risk observations). Observation only; no prescription.
-- **requirements** (analyst) — turn the source into unambiguous, verifiable
-  requirements with Given/When/Then acceptance criteria.
-- **design** (architect) — the smallest solution: decisions with rationale and
+- **intake** — the goal, constraints, stakeholders and repos in scope: a prose
+  issue/idea, or a pointer to an existing codebase.
+- **research** (researcher) — external investigation: docs, vendors, prior art,
+  subject-matter experts.
+- **explore** (explorer) — one findings report per repo (system map, entry points,
+  module responsibilities, data flow, cited `file:line`, debt/risk observations).
+  Observation only; no prescription.
+- **synthesis** (architect) — what the findings add up to across repos: common
+  patterns, divergences, constraints.
+- **spec** (analyst) — unambiguous, verifiable system-level requirements with
+  Given/When/Then acceptance criteria.
+- **architecture** (architect) — the smallest solution: decisions with rationale and
   rejected alternatives, component map, interfaces, data flow. Record durable
-  decisions as ADRs under `03_design/adr/`.
-- **plan** (architect) — dependency-ordered, file-scoped tasks in `tasks.json`.
+  decisions as ADRs under `04_architecture/adr/`.
+- **breakdown** (architect) — epics, features, stories and tasks as ticket files.
+- **publish** (publisher) — sync tickets to a PM tool, then freeze them. A run phase.
 
 Each phase writes its artifact and stops at a gate for human approval.
 
@@ -35,12 +41,17 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen status` | show the active change's phase/status |
 | `zumen switch [--all] [<change>]` | list changes (`--all` includes closed ones), or switch the active change |
 | `zumen source new\|list\|show` | manage `00_intake/` |
-| `zumen adr new\|list\|show` | manage `03_design/adr/` |
+| `zumen adr new\|list\|show` | manage `04_architecture/adr/` |
 | `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate (earlier phases must be approved or skipped); `skipped` needs a reason |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen export [<change>] --to <tomo> [--force]` | copy a spec with an approved plan into a tomo workspace |
+| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>]` | create a ticket in the active change |
+| `zumen tickets check` | validate every ticket: schema, parents, cycles, repos, drift |
+| `zumen tickets status` | list tickets by draft, ready, published and drifted |
+| `zumen tickets order` | list tickets in publish order |
+| `zumen tickets mark-published <id> --external <tool>=<item-id>` | record a PM tool's id and freeze the ticket |
+| `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags (`--add-dir <path>`) for the active change's repos |
 | `zumen settings` | show/merge settings |
@@ -54,8 +65,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 1. **Create a change** — `zumen change new "Title"` (add `--repo <name>` for
    each registered repo, or `--repo <path>` for a single unregistered one). This writes the intake (`00_intake/<id>.md`), makes
-   a `specs/<n>-<slug>/` folder, seeds `STATE.json` (explore starts
-   skipped unless you passed `--repo`), and switches to it.
+   a `specs/<n>-<slug>/` folder, seeds `STATE.json`, and switches to it.
 2. **Kick off** with a prompt like: *"Start the loop on `00_intake/1.md`."*
 
 ## Routing table
@@ -63,24 +73,29 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 | Task / Intent | Directory | Persona | Read | Skip |
 |---|---|---|---|---|
 | Define the base source | `00_intake/` | — | `00_intake/context.md` | `specs/*` |
-| Explore an existing codebase | `01_explore/` | explorer | `01_explore/context.md`, the target repo (see `00_intake/<id>.md`) | `specs/*` |
-| Write requirements | `02_requirements/` | analyst | `02_requirements/context.md`, `00_intake/*`, `01_explore/findings/*` (if explore ran) | target repo |
-| Design solution | `03_design/` | architect | `03_design/context.md`, `specs/<n>-<slug>/requirements.md`, `01_explore/findings/*` (if explore ran) | target repo |
-| Plan tasks | `04_plan/` | architect | `04_plan/context.md`, `specs/<n>-<slug>/design.md` | target repo |
+| External research | `01_research/` | researcher | `01_research/context.md`, `00_intake/<id>.md` | `specs/*`, the repos |
+| Explore the repos | `02_explore/` | explorer | `02_explore/context.md`, the repos (`zumen repo list`) | `specs/*` |
+| Synthesize findings | `02_explore/` | architect | `02_explore/context.md`, `02_explore/<n>-<slug>/*` | `specs/*` |
+| Write the spec | `03_spec/` | analyst | `03_spec/context.md`, `00_intake/*`, `01_research/<n>-<slug>/*`, `02_explore/<n>-<slug>/*` | the repos |
+| Design the architecture | `04_architecture/` | architect | `04_architecture/context.md`, `specs/<n>-<slug>/functional-spec.md`, `02_explore/<n>-<slug>/*` | the repos |
+| Break down into tickets | `05_breakdown/` | architect | `05_breakdown/context.md`, `specs/<n>-<slug>/functional-spec.md`, `specs/<n>-<slug>/architecture.md` | the repos |
 
 ## Naming conventions
 
-- Specs: `specs/<n>-<slug>/requirements.md|design.md|tasks.json`
+- Specs: `specs/<n>-<slug>/functional-spec.md|architecture.md`
+- Tickets: `specs/<n>-<slug>/tickets/<ID>.md`, with ids like `S-0014` from one
+  workspace-wide sequence
 - Intake: `00_intake/<id>.md`
-- Findings: `01_explore/findings/<n>-<slug>.md`
-- ADRs: `03_design/adr/NNNN-<slug>.md`
+- Research: `01_research/<n>-<slug>/<topic>.md`
+- Findings: `02_explore/<n>-<slug>/<repo>.md`, `02_explore/<n>-<slug>/synthesis.md`
+- ADRs: `04_architecture/adr/NNNN-<slug>.md`
 - Personas: `<stage>/personas/<name>.md`
 - Templates: `<stage>/templates/<artifact>.md`
 
 ## Workflow rules
 
-- Intake before requirements; explore (unless skipped) before requirements;
-  requirements before design; design before plan.
+- Each phase in order: a phase can't be gated until the earlier ones are approved,
+  skipped or complete.
 - Each phase stops at a gate for human approval — never proceed past a gate on
   your own. Record transitions with `zumen gate <phase> <status>`. `--force`
   overrides the order check and is logged; only use it when a human says so.
@@ -90,13 +105,14 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
   because they no longer hold. `zumen status` warns if a repo's explore is skipped.
 - `zumen change new`, `gate`, `reopen` and `change close` commit `STATE.json` and
   `LOG.md` for you, leaving anything else you have staged alone. `gate` also commits
-  the change's `specs/<n>-<slug>/` folder, so write the artifact before you gate it.
+  the change's folders under `specs/`, `01_research/` and `02_explore/`, so write the
+  artifact before you gate it. Commit ADRs yourself; they aren't per change.
   They don't push.
 - Cite `file:line` when grounding design or findings in a real codebase.
 
 ## Tech stack & standards
 
-- <FILL IN: the target system's stack, or "greenfield — to be decided in design">
+- <FILL IN: the target systems' stacks, or "greenfield — to be decided in architecture">
 
 ## Directory map
 
@@ -111,16 +127,16 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 ├── REPOS.json            # logical repos and remotes (committed)
 ├── .zumen/               # settings + manifest (committed), active change + repo paths (local)
 ├── 00_intake/            # the base source (<id>.md)
-├── 01_explore/           # explorer (skippable)
-├── 02_requirements/      # analyst
-├── 03_design/            # architect + adr/
-├── 04_plan/              # architect
-└── specs/                # per-change artifacts (<n>-<slug>/)
+├── 01_research/          # researcher (skippable)
+├── 02_explore/           # explorer + synthesis (skippable)
+├── 03_spec/              # analyst
+├── 04_architecture/      # architect + adr/
+├── 05_breakdown/         # architect
+└── specs/                # per-change artifacts and tickets (<n>-<slug>/)
 ```
 
 ## Handoff
 
-`specs/<n>-<slug>/` is portable. To build the plan, run
-`zumen export <n>-<slug> --to <tomo-workspace>` — it copies the spec into the
-tomo workspace's `01_planning/specs/` so tomo's implement phase can consume it.
-The contract is the artifact shape, not any integration.
+Tickets are the only interface out of this workspace. They're local markdown until
+published; then the PM tool owns them, and the file is a frozen snapshot. A coding
+agent picks one up from there, in tomo or any other harness.

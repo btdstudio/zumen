@@ -31,12 +31,12 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 | `zumen settings` | show/merge settings |
 | `zumen switch [--all] [<change>]` | list changes, or switch the active change |
 | `zumen source new\|list\|show` | manage `00_intake/` |
-| `zumen adr new\|list\|show` | manage `03_design/adr/` |
+| `zumen adr new\|list\|show` | manage `04_architecture/adr/` |
 | `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen export [<change>] --to <tomo> [--force]` | copy a spec with an approved plan into a tomo workspace |
+| `zumen tickets new\|check\|status\|order\|mark-published\|unfreeze` | manage tickets |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags for the active change's repos |
 | `zumen check` | validate the embedded scaffold |
@@ -45,21 +45,22 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 
 ## The loop
 
-A change flows through five gated phases, each owned by a persona:
+A change is an initiative, often across many repos, and ends in tickets:
 
-1. **intake** — define the base source (an issue/idea, or a repo pointer).
-2. **explore** *(skippable)* — findings report for a real codebase.
-3. **requirements** (analyst) — turn the source into an unambiguous spec.
-4. **design** (architect) — the smallest solution + ADRs.
-5. **plan** (architect) — dependency-ordered tasks.
+1. **intake** — the goal, constraints and repos in scope.
+2. **research** (researcher) *(skippable)* — external investigation.
+3. **explore** (explorer) *(skippable)* — one findings report per repo.
+4. **synthesis** (architect) *(skippable)* — what the findings add up to.
+5. **spec** (analyst) — system-level requirements.
+6. **architecture** (architect) — the smallest solution + ADRs.
+7. **breakdown** (architect) — epics, features, stories and tasks as ticket files.
+8. **publish** (publisher) — sync tickets to a PM tool, then freeze them.
 
 Each phase stops at a gate for your approval. With the default `gates: block`
 setting, `zumen gate` refuses a phase until the earlier ones are approved or
-skipped, and
-`zumen export` refuses a change whose plan isn't approved. `--force` overrides
-this and records it in `LOG.md`; `prompt` and `auto` warn instead. State changes
+skipped. `--force` overrides this and records it in `LOG.md`; `prompt` and `auto` warn instead. State changes
 commit `STATE.json` and `LOG.md` for you, without pushing, and gates also commit the
-change's spec folder.
+change's folders under `specs/`, `01_research/` and `02_explore/`.
 
 ## The workspace
 
@@ -70,18 +71,20 @@ change's spec folder.
 ├── REPOS.json         logical repos and remotes (committed)
 ├── .zumen/            settings + manifest (committed), active change + repo paths (local)
 ├── 00_intake/         base source (<id>.md)
-├── 01_explore/        explorer (skippable)
-├── 02_requirements/   analyst
-├── 03_design/         architect + adr/
-├── 04_plan/           architect
-└── specs/             per-change artifacts (<n>-<slug>/)
+├── 01_research/       researcher (skippable)
+├── 02_explore/        explorer + synthesis (skippable)
+├── 03_spec/           analyst
+├── 04_architecture/   architect + adr/
+├── 05_breakdown/      architect
+└── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
 
 ## Handoff
 
-`specs/<n>-<slug>/` is portable. Run `zumen export <n>-<slug> --to <tomo>` to
-copy it into a tomo workspace's `01_planning/specs/`, then run tomo's implement
-phase — or feed it to any other harness.
+Tickets are the only interface out of a workspace. They're local markdown until
+published; then the PM tool owns them, and the file is a frozen snapshot. A coding
+agent picks one up from there, in [tomo](https://github.com/btdstudio/tomo) or any
+other harness.
 
 ## Development
 

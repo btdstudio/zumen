@@ -1,7 +1,8 @@
 # 00_intake — Base source
 
-Holds the base source for each change: a prose issue/idea, or a pointer to an
-existing codebase to plan against.
+Holds the base source for each change: the goal, constraints, stakeholders and
+repos in scope. It can be a prose issue/idea, or a pointer to an existing codebase
+to plan against.
 
 ## Files
 - `<id>.md` — one per source (created by `zumen source new`)
@@ -16,8 +17,8 @@ rev: <branch/sha>      # optional pin
 ```
 
 ## When `source: repo`
-The loop runs `explore` before `requirements`. `zumen change new --repo` sets
-this up. If a change started without a repo, bring explore back with
+The loop runs `explore` before `spec`. `zumen change new --repo` sets this up. If a
+change started without a repo, bring explore back with
 `zumen reopen explore --reason <r>`.
 
 ## Gate

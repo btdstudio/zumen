@@ -1,22 +1,22 @@
 // Package state configures kiso's phase machine for zumen and migrates older
 // STATE.json files.
 //
-// The planning loop is intake → explore → requirements → design → plan. Every
-// phase is gated. Explore is skippable: `zumen change new` skips it unless the
-// intake points at a real codebase.
+// The planning loop is intake → research → explore → synthesis → spec →
+// architecture → breakdown → publish. Research, explore and synthesis are
+// skippable, and publish is a run phase.
 //
 // Layout:
 //
 //	STATE.json         phase machine: { schema, changes } maps each change folder
-//	                   to its own { phase, status, gates, sources, updatedAt }
+//	                   to its own { phase, status, gates, sources, repos, updatedAt }
 //	                   record — the single store, committed so approvals survive
 //	                   a clone. LoadState resolves the active record.
 //	LOG.md             one timestamped line per state change / gate (committed)
 //	.zumen/active      the active change's name; gitignored, because each
 //	                   checkout works on its own change
 //	REPOS.json         logical repos (committed); .zumen/paths.json is local
-//	specs/             per-change folders: <id>-<slug>/requirements.md,
-//	                   design.md, tasks.json
+//	specs/             per-change folders: <id>-<slug>/functional-spec.md,
+//	                   architecture.md, tickets/<ID>.md
 package state
 
 import (
@@ -33,26 +33,38 @@ import (
 // Machine is the planning loop.
 var Machine = kiso.Machine{Tool: "zumen", Phases: []kiso.Phase{
 	{Name: "intake", Kind: kiso.Gated},
+	{Name: "research", Kind: kiso.Gated, Skippable: true},
 	{Name: "explore", Kind: kiso.Gated, Skippable: true},
-	{Name: "requirements", Kind: kiso.Gated},
-	{Name: "design", Kind: kiso.Gated},
-	{Name: "plan", Kind: kiso.Gated},
+	{Name: "synthesis", Kind: kiso.Gated, Skippable: true},
+	{Name: "spec", Kind: kiso.Gated},
+	{Name: "architecture", Kind: kiso.Gated},
+	{Name: "breakdown", Kind: kiso.Gated},
+	{Name: "publish", Kind: kiso.Run},
 }}
 
-// NoRepoReason explains the explore skip that `zumen change new` records.
-const NoRepoReason = "no repo in the intake"
+// Schema is zumen's STATE.json version. Version 2 is the v2 loop.
+const Schema = 2
+
+// Reasons for the skips `zumen change new` records.
+const (
+	NoRepoReason     = "no repo in the intake"
+	SingleRepoReason = "fewer than two repos in scope"
+)
 
 // Now is the injectable clock used for timestamps (updatedAt and log lines).
 // Tests override it to make output deterministic.
 var Now = time.Now
 
 var store = kiso.Store{
-	Machine:   Machine,
-	SpecsDir:  "specs",
-	Commit:    true,
-	Now:       func() time.Time { return Now() },
-	Migrate:   migrate,
-	Preflight: refuseOldLocation,
+	Machine:  Machine,
+	SpecsDir: "specs",
+	// Gates commit each change's research notes and findings too.
+	ChangeDirs: []string{"01_research", "02_explore"},
+	Schema:     Schema,
+	Commit:     true,
+	Now:        func() time.Time { return Now() },
+	Migrate:    migrate,
+	Preflight:  refuseOldLocation,
 }
 
 type (
@@ -113,13 +125,17 @@ func SetGate(st *State, phase, status, reason string) error {
 func CheckGate(st State, phase, status string) error { return Machine.CheckGate(st, phase, status) }
 
 // SeedChange creates a change folder and records its initial machine, making it
-// the active change. Without a repo there's nothing to explore, so explore starts
-// skipped. Sources are committed with it, so a clone has what the record points
+// the active change. Without a repo there's nothing to explore, and with fewer than
+// two there's nothing to synthesize, so those start skipped. Sources are committed with it, so a clone has what the record points
 // at.
 func SeedChange(root, name string, hasRepo bool, sources []string, repos ...string) (State, error) {
 	opts := kiso.SeedOptions{Sources: sources, Repos: repos, Paths: sources}
+	opts.Skip = map[string]string{}
 	if !hasRepo {
-		opts.Skip = map[string]string{"explore": NoRepoReason}
+		opts.Skip["explore"] = NoRepoReason
+	}
+	if len(repos) < 2 {
+		opts.Skip["synthesis"] = SingleRepoReason
 	}
 	return store.Seed(root, name, opts)
 }
@@ -138,14 +154,24 @@ func CloseChange(root, name, reason string) (State, error) {
 	return store.CloseChange(root, name, reason)
 }
 
+// Record logs lines and commits them with the given paths, relative to root.
+func Record(root string, lines []string, paths ...string) error {
+	return store.Record(root, lines, paths...)
+}
+
 // AppendLog appends one timestamped line to LOG.md.
 func AppendLog(root, line string) error { return store.Log(root, line) }
 
-// migrate upgrades a pre-schema STATE.json, whose changes carried a `mode`. A
-// change that wasn't "existing" never ran explore, so explore becomes skipped; an
-// "existing" change still has to finish it. Approvals carry over as they are.
+// renamedPhases maps v1 phases to the phases that replaced them.
+var renamedPhases = map[string]string{"requirements": "spec", "design": "architecture", "plan": "breakdown"}
+
+// migrate upgrades an older STATE.json, keeping every approval. Before schema 1, a
+// change carried a `mode`: one that wasn't "existing" never ran explore, so explore
+// becomes skipped. For schema 2, v1's phases are renamed. Research and synthesis
+// didn't exist, so a change already past them has them skipped.
 func migrate(data []byte) ([]byte, error) {
 	var old struct {
+		Schema  int                       `json:"schema"`
 		Changes map[string]map[string]any `json:"changes"`
 	}
 	if err := json.Unmarshal(data, &old); err != nil {
@@ -155,21 +181,40 @@ func migrate(data []byte) ([]byte, error) {
 		if rec == nil {
 			continue
 		}
-		mode, _ := rec["mode"].(string)
-		delete(rec, "mode")
-		if mode == "existing" {
-			continue
+		gates := map[string]any{}
+		if raw, ok := rec["gates"].(map[string]any); ok {
+			for phase, status := range raw {
+				if s, _ := status.(string); s != "" {
+					if renamed, ok := renamedPhases[phase]; ok {
+						phase = renamed
+					}
+					gates[phase] = s
+				}
+			}
 		}
-		gates, _ := rec["gates"].(map[string]any)
-		if gates == nil {
-			gates = map[string]any{}
-			rec["gates"] = gates
+		rec["gates"] = gates
+		if phase, _ := rec["phase"].(string); renamedPhases[phase] != "" {
+			rec["phase"] = renamedPhases[phase]
 		}
-		if explore, _ := gates["explore"].(string); explore == "" {
+		if mode, _ := rec["mode"].(string); old.Schema == 0 && mode != "existing" && gates["explore"] == nil {
 			gates["explore"] = kiso.Skipped
 		}
+		delete(rec, "mode")
+		pastSynthesis := false
+		for _, phase := range []string{"spec", "architecture", "breakdown"} {
+			pastSynthesis = pastSynthesis || gates[phase] != nil
+		}
+		if pastSynthesis || (gates["explore"] != nil && gates["explore"] != kiso.Skipped) {
+			if gates["research"] == nil {
+				gates["research"] = kiso.Skipped
+			}
+		}
+		repos, _ := rec["repos"].([]any)
+		if (pastSynthesis || len(repos) < 2) && gates["synthesis"] == nil {
+			gates["synthesis"] = kiso.Skipped
+		}
 	}
-	return json.Marshal(map[string]any{"schema": kiso.Schema, "changes": old.Changes})
+	return json.Marshal(map[string]any{"schema": Schema, "changes": old.Changes})
 }
 
 // refuseOldLocation stops a workspace from an earlier version, which kept its

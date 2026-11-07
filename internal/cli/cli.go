@@ -12,7 +12,6 @@ import (
 	"github.com/btdstudio/kiso/repos"
 	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/zumen/internal/adr"
-	"github.com/btdstudio/zumen/internal/export"
 	"github.com/btdstudio/zumen/internal/settings"
 	"github.com/btdstudio/zumen/internal/source"
 	"github.com/btdstudio/zumen/internal/state"
@@ -45,8 +44,8 @@ func Run(args []string) int {
 		return runGate(root, args[1:])
 	case "reopen":
 		return runReopen(root, args[1:])
-	case "export":
-		return runExport(root, args[1:])
+	case "tickets":
+		return runTickets(root, args[1:])
 	case "repo":
 		return repos.Run(root, "zumen", args[1:], os.Stdout, os.Stderr)
 	case "env":
@@ -69,14 +68,19 @@ Usage:
   zumen settings                           show effective settings
   zumen switch [--all] [<change>]          list changes, or switch the active one
   zumen source new|list|show [args]        manage 00_intake/
-  zumen adr new|list|show [args]           manage 03_design/adr/
-  zumen change new <title> [--repo <p>]    create a change + intake + switch
+  zumen adr new|list|show [args]           manage 04_architecture/adr/
+  zumen change new <title> [--repo <name>]...
+                                           create a change + intake + switch
   zumen change close <change> --reason <r> close a change
   zumen gate <phase> <status> [--reason <r>] [--force]
                                            advance the active change's gate
   zumen reopen <phase> --reason <r>        move back to a phase, clearing later approvals
-  zumen export [<change>] --to <tomo> [--force]
-                                           copy an approved spec into a tomo workspace
+  zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>]
+                                           create a ticket in the active change
+  zumen tickets check|status|order         validate, list and order tickets
+  zumen tickets mark-published <id> --external <tool>=<item-id>
+                                           record a PM tool's id and freeze the ticket
+  zumen tickets unfreeze <id> --reason <r> clear a ticket's freeze
 ` + repos.Usage("zumen") + `  zumen env                                print harness flags for the active change's repos
   zumen check                              validate the embedded scaffold
   zumen version                            print the version
@@ -266,8 +270,10 @@ func runChange(root string, args []string) int {
 		return 1
 	}
 	fmt.Printf("created change %s (source #%d)\n", st.Name, created.ID)
-	if repo == "" {
-		fmt.Printf("explore skipped: %s\n", state.NoRepoReason)
+	for _, phase := range []string{"explore", "synthesis"} {
+		if st.Gates[phase] == kiso.Skipped {
+			fmt.Printf("%s skipped\n", phase)
+		}
 	}
 	return 0
 }
@@ -386,73 +392,6 @@ func runReopen(root string, args []string) int {
 		return 1
 	}
 	fmt.Printf("%s: %s = %s\n", st.Name, st.Phase, st.Status)
-	return 0
-}
-
-func runExport(root string, args []string) int {
-	var change, target, specsDir string
-	force := false
-	for i := 0; i < len(args); i++ {
-		switch a := args[i]; {
-		case a == "--to" && i+1 < len(args):
-			i++
-			target = args[i]
-		case a == "--specs-dir" && i+1 < len(args):
-			i++
-			specsDir = args[i]
-		case a == "--force":
-			force = true
-		case strings.HasPrefix(a, "-"):
-			fmt.Fprintf(os.Stderr, "zumen export: unknown flag %q\n", a)
-			return 1
-		default:
-			change = a
-		}
-	}
-	if target == "" {
-		fmt.Fprintln(os.Stderr, "usage: zumen export [<change>] --to <tomo-workspace> [--specs-dir <dir>] [--force]")
-		return 1
-	}
-	if change == "" {
-		st, err := state.LoadState(root)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-		if st.Name == "" {
-			fmt.Fprintln(os.Stderr, "zumen export: no active change — pass <change> or run `zumen switch <change>`")
-			return 1
-		}
-		change = st.Name
-	}
-	changes, err := state.ReadChanges(root)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	var violation error
-	if rec := changes[change]; rec == nil || rec.Gates["plan"] != kiso.Approved {
-		violation = fmt.Errorf("zumen: the plan for %s is not approved", change)
-		if err := gatePolicy(root, violation, force); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-	}
-	rep, err := export.Export(root, change, target, specsDir, force)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	if violation != nil {
-		if err := state.AppendLog(root, "override: export: "+violation.Error()); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return 1
-		}
-	}
-	for _, rel := range rep.Copied {
-		fmt.Printf("exported %s/%s\n", rep.Change, rel)
-	}
-	fmt.Printf("exported %s -> %s\n", rep.Change, rep.Dest)
 	return 0
 }
 

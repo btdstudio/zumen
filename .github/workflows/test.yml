@@ -15,6 +15,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - name: Check format
+        run: test -z "$(gofmt -l .)"
       - run: go test ./...
 
   smoke:

@@ -1,5 +1,5 @@
 // Package adr owns zumen's architecture decision records: one NNNN-<slug>.md
-// file per decision under the settings `adrDir` (default `03_design/adr`).
+// file per decision under the settings `adrDir` (default `04_architecture/adr`).
 // Decisions are numbered and immutable — edit by adding a new ADR that
 // supersedes the old one.
 package adr
@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const DEFAULT_ADR_DIR = "03_design/adr"
+const DEFAULT_ADR_DIR = "04_architecture/adr"
 const STATUS_PROPOSED = "proposed"
 const STATUS_ACCEPTED = "accepted"
 const STATUS_SUPERSEDED = "superseded"

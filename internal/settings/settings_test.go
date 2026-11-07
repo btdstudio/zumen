@@ -54,7 +54,7 @@ func TestProjectSupersedesGlobal(t *testing.T) {
 	}
 	e := loaded.Effective
 	if e.BaseSource != "00_intake/2.md" || e.Gates != "prompt" ||
-		e.SourceDir != "custom" || e.ArtifactDir != "plans" || e.AdrDir != "03_design/adr" {
+		e.SourceDir != "custom" || e.ArtifactDir != "plans" || e.AdrDir != "04_architecture/adr" {
 		t.Fatalf("effective = %+v", e)
 	}
 }

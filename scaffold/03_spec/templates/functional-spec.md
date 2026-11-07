@@ -1,4 +1,4 @@
-# Requirements — <short name of the change>
+# Functional spec — <short name of the change>
 
 - **Status:** draft | await-approval | approved
 - **Date:** <ISO date>
@@ -19,7 +19,7 @@ do not restate it verbatim.>
 
 - <what it deliberately does not include>
 
-## Requirements
+## Functional requirements
 
 ### Functional
 

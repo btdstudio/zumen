@@ -28,11 +28,11 @@ var spec = core.Spec[Settings]{
 
 func DefaultSettings() Settings {
 	return Settings{
-		BaseSource:  "",              // default base source: a 00_intake path | "issue:N" | "url:..."
-		Gates:       "block",         // block | prompt | auto
-		SourceDir:   "00_intake",     // the intake store
-		ArtifactDir: "specs",         // per-change artifacts
-		AdrDir:      "03_design/adr", // architecture decision records
+		BaseSource:  "",                    // default base source: a 00_intake path | "issue:N" | "url:..."
+		Gates:       "block",               // block | prompt | auto
+		SourceDir:   "00_intake",           // the intake store
+		ArtifactDir: "specs",               // per-change artifacts
+		AdrDir:      "04_architecture/adr", // architecture decision records
 	}
 }
 

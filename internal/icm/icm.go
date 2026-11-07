@@ -3,8 +3,14 @@
 package icm
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/btdstudio/kiso/scaffold"
 	"github.com/btdstudio/zumen"
@@ -61,8 +67,114 @@ func seeds() ([]scaffold.Seed, error) {
 // Scaffold writes the embedded tree into dir; see scaffold.Engine.Scaffold.
 func Scaffold(dir string, opts Options) (Report, error) { return engine.Scaffold(dir, opts) }
 
-// Update refreshes managed files; see scaffold.Engine.Update.
-func Update(dir string) (UpdateReport, error) { return engine.Update(dir) }
+// Update moves v1 rooms to their v2 names, then refreshes managed files; see
+// scaffold.Engine.Update.
+func Update(dir string) (UpdateReport, error) {
+	if _, err := MigrateRooms(dir); err != nil {
+		return UpdateReport{}, err
+	}
+	return engine.Update(dir)
+}
+
+// renamedRooms maps v1 room folders to their v2 names, in an order where a new name
+// is free by the time it's used.
+var renamedRooms = [][2]string{
+	{"04_plan", "05_breakdown"},
+	{"03_design", "04_architecture"},
+	{"02_requirements", "03_spec"},
+	{"01_explore", "02_explore"},
+}
+
+// MigrateRooms moves v1 room folders to their v2 names and returns what it moved.
+// The manifest follows, so `update` can still tell unedited files from edited ones.
+// Files the v2 scaffold no longer has are removed if unedited and kept if edited. A
+// room whose new name is already taken is left alone.
+func MigrateRooms(dir string) ([]string, error) {
+	var moved [][2]string
+	for _, room := range renamedRooms {
+		from, to := filepath.Join(dir, room[0]), filepath.Join(dir, room[1])
+		if info, err := os.Stat(from); err != nil || !info.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(to); err == nil {
+			continue
+		}
+		if err := os.Rename(from, to); err != nil {
+			return nil, err
+		}
+		moved = append(moved, room)
+	}
+	if len(moved) == 0 {
+		return nil, nil
+	}
+	if err := fixAdrDir(dir); err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, room := range moved {
+		names = append(names, room[0]+" -> "+room[1])
+	}
+	cur, err := engine.ReadManifest(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return names, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	next, err := engine.BuildManifest()
+	if err != nil {
+		return nil, err
+	}
+	files := map[string]string{}
+	for rel, hash := range cur.Files {
+		newRel := rel
+		for _, room := range moved {
+			if strings.HasPrefix(rel, room[0]+"/") {
+				newRel = room[1] + strings.TrimPrefix(rel, room[0])
+				if err := dropUneditedOrphan(dir, newRel, hash, next); err != nil {
+					return nil, err
+				}
+			}
+		}
+		files[newRel] = hash
+	}
+	cur.Files = files
+	return names, engine.WriteManifest(dir, cur)
+}
+
+func dropUneditedOrphan(dir, rel, recorded string, next Manifest) error {
+	if _, stillManaged := next.Files[rel]; stillManaged {
+		return nil
+	}
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	sum := sha256.Sum256(data)
+	if hex.EncodeToString(sum[:]) != recorded {
+		return nil
+	}
+	return os.Remove(path)
+}
+
+// fixAdrDir moves the seeded v1 default in a committed settings file. A custom value
+// is left alone.
+func fixAdrDir(dir string) error {
+	path := settings.ProjectSettingsPath(dir)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	updated := strings.Replace(string(data), `"adrDir": "03_design/adr"`, `"adrDir": "04_architecture/adr"`, 1)
+	if updated == string(data) {
+		return nil
+	}
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
 
 // Check validates the embedded scaffold; see scaffold.Engine.Check.
 func Check() []string { return engine.Check() }
