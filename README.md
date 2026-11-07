@@ -1,11 +1,11 @@
 # Zumen (図面) 📐 — folder-driven planning workspace
 
 Zumen scaffolds and maintains an Interpretable Context Methodology (ICM)
-workspace for the **architecture, design, and planning** of software work — the
-upstream half of the SDLC. Where [tomo](https://github.com/btdstudio/tomo) is
-for *building*, zumen is for *deciding what and how to build* before code
-exists. The filesystem is the architecture; no framework or runtime is required
-after scaffold.
+workspace for **planning initiatives**: work that takes weeks, often spans many
+repos, and needs research and architecture before anyone writes code. It ends in
+tickets. Where [tomo](https://github.com/btdstudio/tomo) executes one change in one
+repo, zumen decides what those changes should be. The filesystem is the
+architecture; no framework or runtime is required after scaffold.
 
 ## Attribution
 
@@ -58,9 +58,10 @@ A change is an initiative, often across many repos, and ends in tickets:
 
 Each phase stops at a gate for your approval. With the default `gates: block`
 setting, `zumen gate` refuses a phase until the earlier ones are approved or
-skipped. `--force` overrides this and records it in `LOG.md`; `prompt` and `auto` warn instead. State changes
-commit `STATE.json` and `LOG.md` for you, without pushing, and gates also commit the
-change's folders under `specs/`, `01_research/` and `02_explore/`.
+skipped. `--force` overrides this and records it in `LOG.md`; `prompt` and `auto`
+warn instead. State changes commit `STATE.json` and `LOG.md` for you, without pushing,
+and gates also commit the change's folders under `specs/`, `01_research/` and
+`02_explore/`.
 
 ## The workspace
 
@@ -80,15 +81,32 @@ change's folders under `specs/`, `01_research/` and `02_explore/`.
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
 
-## Handoff
+## Tickets
 
-Tickets are the only interface out of a workspace. Publishing them is agent work:
-`06_publish/sync.md` tells an agent how to talk to your PM tool, and the CLI never
-calls one. A GitHub Issues starter ships in `06_publish/sync-examples/`.
- They're local markdown until
-published; then the PM tool owns them, and the file is a frozen snapshot. A coding
-agent picks one up from there, in [tomo](https://github.com/btdstudio/tomo) or any
-other harness.
+Tickets are the only interface out of a workspace. Each is one markdown file,
+`specs/<n>-<slug>/tickets/<ID>.md`, local until it's published. After that, the PM
+tool owns it, and the file is a frozen snapshot: `zumen tickets check` flags any edit
+as drift. To change a published ticket, write a new one with `supersedes`, or run
+`zumen tickets unfreeze` so the next sync updates the existing item.
+
+Publishing is agent work. `06_publish/sync.md` tells an agent how to talk to your PM
+tool, and the CLI never calls one. A GitHub Issues starter ships in
+`06_publish/sync-examples/`; copy it to `sync.md` and fill in its settings. ADO and
+Jira starters are planned.
+
+## Handing off to a coding agent
+
+A coding agent picks a ticket up from there, in any harness. In
+[tomo](https://github.com/btdstudio/tomo):
+
+```sh
+tomo change new --from ../planning/specs/1-release/tickets/S-0014.md
+```
+
+That copies the ticket in as a snapshot and starts a change. Approvals don't carry
+over, because tomo approves something different: how this one ticket lands in this
+one repo. Neither tool needs the other to run; the ticket format is all they share,
+through [kiso](https://github.com/btdstudio/kiso).
 
 ## Development
 
@@ -98,4 +116,5 @@ go test ./...                    # all tests
 go test ./internal/icm -update  # regenerate golden fixtures
 ```
 
-Runtime: Go >= 1.22, standard library only.
+Runtime: Go >= 1.22, standard library only, plus the first-party
+[kiso](https://github.com/btdstudio/kiso) core.
