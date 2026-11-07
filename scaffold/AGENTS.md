@@ -89,7 +89,9 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
   <phase> --reason <r>` to go back: it clears the approvals after that phase,
   because they no longer hold. `zumen status` warns if a repo's explore is skipped.
 - `zumen change new`, `gate`, `reopen` and `change close` commit `STATE.json` and
-  `LOG.md` for you, leaving anything else you have staged alone. They don't push.
+  `LOG.md` for you, leaving anything else you have staged alone. `gate` also commits
+  the change's `specs/<n>-<slug>/` folder, so write the artifact before you gate it.
+  They don't push.
 - Cite `file:line` when grounding design or findings in a real codebase.
 
 ## Tech stack & standards
