@@ -62,7 +62,7 @@ func PrintUsage() {
 	fmt.Print(`zumen — folder-driven planning workspace
 
 Usage:
-  zumen init [dir] [--no-git] [--force]   scaffold the planning ICM structure
+  zumen init [dir] [--no-git] [--force]   scaffold the planning ICM structure (--no-git: local, vcs: none)
   zumen update                             refresh managed files
   zumen status                             show the active change
   zumen settings                           show effective settings
@@ -89,6 +89,11 @@ Usage:
 }
 
 func runStatus(root string) int {
+	loaded, err := settings.LoadSettings(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	st, err := state.LoadState(root)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -96,6 +101,7 @@ func runStatus(root string) int {
 	}
 	if st.Name == "" {
 		fmt.Println("no active change")
+		fmt.Printf("vcs:      %s\n", loaded.VCS)
 		return 0
 	}
 	fmt.Printf("change:   %s\n", st.Name)
@@ -106,6 +112,7 @@ func runStatus(root string) int {
 		gates = append(gates, p.Name+"="+st.Gates[p.Name])
 	}
 	fmt.Printf("gates:    %s\n", strings.Join(gates, " "))
+	fmt.Printf("vcs:      %s\n", loaded.VCS)
 	warnSkippedExplore(root, st)
 	return 0
 }

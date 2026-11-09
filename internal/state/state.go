@@ -28,6 +28,7 @@ import (
 
 	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/kiso/workspace"
+	"github.com/btdstudio/zumen/internal/settings"
 )
 
 // Machine is the planning loop.
@@ -65,6 +66,19 @@ var store = kiso.Store{
 	Now:        func() time.Time { return Now() },
 	Migrate:    migrate,
 	Preflight:  refuseOldLocation,
+}
+
+// storeAt is the store for the workspace at root, carrying its "vcs" setting so
+// a local workspace (vcs: none) never runs git. Only the wrappers that record a
+// transition need it; paths and reads use store directly.
+func storeAt(root string) (kiso.Store, error) {
+	loaded, err := settings.LoadSettings(root)
+	if err != nil {
+		return kiso.Store{}, err
+	}
+	s := store
+	s.VCS = loaded.VCS
+	return s, nil
 }
 
 type (
@@ -126,8 +140,8 @@ func CheckGate(st State, phase, status string) error { return Machine.CheckGate(
 
 // SeedChange creates a change folder and records its initial machine, making it
 // the active change. Without a repo there's nothing to explore, and with fewer than
-// two there's nothing to synthesize, so those start skipped. Sources are committed with it, so a clone has what the record points
-// at.
+// two there's nothing to synthesize, so those start skipped. Under vcs: git,
+// sources are committed with it, so a clone has what the record points at.
 func SeedChange(root, name string, hasRepo bool, sources []string, repos ...string) (State, error) {
 	opts := kiso.SeedOptions{Sources: sources, Repos: repos, Paths: sources}
 	opts.Skip = map[string]string{}
@@ -137,26 +151,50 @@ func SeedChange(root, name string, hasRepo bool, sources []string, repos ...stri
 	if len(repos) < 2 {
 		opts.Skip["synthesis"] = SingleRepoReason
 	}
-	return store.Seed(root, name, opts)
+	s, err := storeAt(root)
+	if err != nil {
+		return State{}, err
+	}
+	return s.Seed(root, name, opts)
 }
 
 // AdvanceGate sets a gate on the active change, logs it with any notes, and
-// commits.
+// commits under vcs: git.
 func AdvanceGate(root, phase, status, reason string, notes ...string) (State, error) {
-	return store.Advance(root, phase, status, reason, notes...)
+	s, err := storeAt(root)
+	if err != nil {
+		return State{}, err
+	}
+	return s.Advance(root, phase, status, reason, notes...)
 }
 
-// Reopen moves the active change back to a phase, logs it and commits.
-func Reopen(root, phase, reason string) (State, error) { return store.Reopen(root, phase, reason) }
+// Reopen moves the active change back to a phase, logs it and commits under
+// vcs: git.
+func Reopen(root, phase, reason string) (State, error) {
+	s, err := storeAt(root)
+	if err != nil {
+		return State{}, err
+	}
+	return s.Reopen(root, phase, reason)
+}
 
-// CloseChange closes a change by name, logs it and commits.
+// CloseChange closes a change by name, logs it and commits under vcs: git.
 func CloseChange(root, name, reason string) (State, error) {
-	return store.CloseChange(root, name, reason)
+	s, err := storeAt(root)
+	if err != nil {
+		return State{}, err
+	}
+	return s.CloseChange(root, name, reason)
 }
 
-// Record logs lines and commits them with the given paths, relative to root.
+// Record logs lines and, under vcs: git, commits them with the given paths,
+// relative to root.
 func Record(root string, lines []string, paths ...string) error {
-	return store.Record(root, lines, paths...)
+	s, err := storeAt(root)
+	if err != nil {
+		return err
+	}
+	return s.Record(root, lines, paths...)
 }
 
 // AppendLog appends one timestamped line to LOG.md.
