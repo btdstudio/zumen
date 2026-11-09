@@ -70,3 +70,17 @@ func ReadIfExists(file string) (map[string]any, error) { return spec.ReadIfExist
 func MergeSettings(layers ...map[string]any) (Settings, error) { return spec.Merge(layers...) }
 
 func LoadSettings(root string) (Loaded, error) { return spec.Load(root) }
+
+// InitVCS is the "vcs" value for a workspace that `zumen init` is about to create.
+// --no-git forces "none"; otherwise the global settings decide, defaulting to
+// "git". There are no project settings yet to consult.
+func InitVCS(noGit bool) (string, error) {
+	if noGit {
+		return core.VCSNone, nil
+	}
+	global, err := ReadIfExists(GlobalSettingsPath())
+	if err != nil {
+		return "", err
+	}
+	return core.VCSOf("zumen", global)
+}
