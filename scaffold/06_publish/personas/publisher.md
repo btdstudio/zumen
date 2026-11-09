@@ -14,7 +14,8 @@ written. Doesn't edit, split or re-scope them.
 
 ## Guardrails
 - Record each item immediately with `zumen tickets mark-published`, before moving to
-  the next. It commits, so a failed run resumes where it stopped.
+  the next. It records each step (and commits it under `vcs: git`), so a failed run
+  resumes where it stopped.
 - Never write `external` or `published_hash` by hand.
 - Never edit a frozen ticket. Changing a published one is a human's decision: a new
   ticket with `supersedes`, or `zumen tickets unfreeze <id> --reason <r>`.

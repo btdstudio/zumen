@@ -94,6 +94,13 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 - Personas: `<stage>/personas/<name>.md`
 - Templates: `<stage>/templates/<artifact>.md`
 
+## Version control
+
+`vcs` in `.zumen/settings.json` says whether this workspace lives in git: `git`
+(the default) or `none`. Under `vcs: git`, zumen commits workspace state as
+described below. Under `vcs: none` the workspace is plain local files: zumen
+writes the same files but never runs git, and there are no git files to keep.
+
 ## Workflow rules
 
 - Each phase in order: a phase can't be gated until the earlier ones are approved,
@@ -105,11 +112,11 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 - Skip a phase with `zumen gate <phase> skipped --reason <r>`. Use `zumen reopen
   <phase> --reason <r>` to go back: it clears the approvals after that phase,
   because they no longer hold. `zumen status` warns if a repo's explore is skipped.
-- `zumen change new`, `gate`, `reopen` and `change close` commit `STATE.json` and
-  `LOG.md` for you, leaving anything else you have staged alone. `gate` also commits
-  the change's folders under `specs/`, `01_research/` and `02_explore/`, so write the
-  artifact before you gate it. Commit ADRs yourself; they aren't per change.
-  They don't push.
+- `zumen change new`, `gate`, `reopen` and `change close` write `STATE.json` and
+  `LOG.md`. Under `vcs: git` they also commit them for you, leaving anything else
+  you have staged alone, and `gate` commits the change's folders under `specs/`,
+  `01_research/` and `02_explore/`, so write the artifact before you gate it. Under
+  `vcs: git`, commit ADRs yourself; they aren't per change. They don't push.
 - Cite `file:line` when grounding design or findings in a real codebase.
 
 ## Tech stack & standards
@@ -122,12 +129,12 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── README.md
-├── .gitignore
-├── .gitattributes
-├── STATE.json            # per-change phase, gates, sources (committed)
-├── LOG.md                # gate history (committed)
-├── REPOS.json            # logical repos and remotes (committed)
-├── .zumen/               # settings + manifest (committed), active change + repo paths (local)
+├── .gitignore            # vcs: git only
+├── .gitattributes        # vcs: git only
+├── STATE.json            # per-change phase, gates, sources (committed under vcs: git)
+├── LOG.md                # gate history (committed under vcs: git)
+├── REPOS.json            # logical repos and remotes (committed under vcs: git)
+├── .zumen/               # settings + manifest (committed under vcs: git), active change + repo paths (local)
 ├── 00_intake/            # the base source (<id>.md)
 ├── 01_research/          # researcher (skippable)
 ├── 02_explore/           # explorer + synthesis (skippable)
