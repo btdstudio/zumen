@@ -90,18 +90,13 @@ The `vcs` setting says whether a workspace lives in git. Set it in
 | Value | Behavior |
 |---|---|
 | `git` (default) | `init` runs `git init` and writes `.gitignore`, `.gitattributes` and `.gitkeep` placeholders; state changes commit. Outside a git repo they warn, with a hint to set `"vcs": "none"`. |
-| `none` | The workspace is plain local files: no `git init`, no git files, no commits and no warning. `STATE.json` and `LOG.md` are still written. |
+| `none` | The workspace is plain local files: no `git init`, no commits and no warning. `.gitignore` is kept so `.zumen/active` and `.zumen/paths.json` stay out of any enclosing or later git repo; `.gitattributes` and `.gitkeep` are left out. `STATE.json` and `LOG.md` are still written. |
 
 `zumen init --no-git`, or a global `"vcs": "none"`, creates a local workspace and
 records `"vcs": "none"` in its settings. `zumen status` shows the mode. To switch a
 workspace later, change `vcs` and run `zumen update`. Going to `git` restores the git
-files, and you run `git init` yourself. Run `zumen update` before your first `git add`:
-until it restores `.gitignore`, the machine-local `.zumen/active` and
-`.zumen/paths.json` (which holds absolute checkout paths) aren't ignored. Going to
-`none` leaves existing git files on disk, but zumen stops managing them.
-
-A local workspace has no `.gitignore` of its own. If it sits inside another git repo,
-have that repo ignore `.zumen/active` and `.zumen/paths.json`.
+files, and you run `git init` yourself. Going to `none` leaves existing git files on
+disk; zumen keeps managing `.gitignore` and stops managing the rest.
 
 The setting covers the planning workspace only. The repos in `REPOS.json` are always
 git checkouts.
