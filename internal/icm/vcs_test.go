@@ -5,27 +5,35 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/btdstudio/kiso/scaffold"
 )
 
-// gitFilesOnDisk lists the .gitignore, .gitattributes and .gitkeep files under
-// dir, skipping .git itself.
-func gitFilesOnDisk(t *testing.T, dir string) []string {
+// omittedLocally mirrors kiso's rule for a local workspace (vcs: none): every
+// git file is left out except .gitignore, which keeps .zumen/active and
+// .zumen/paths.json out of an enclosing or later git repo.
+func omittedLocally(rel string) bool {
+	return scaffold.IsGitFile(rel) && path.Base(rel) != ".gitignore"
+}
+
+// gitFilesOnDisk lists the files under dir that match, skipping .git itself.
+func gitFilesOnDisk(t *testing.T, dir string, match func(string) bool) []string {
 	t.Helper()
 	var found []string
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() && d.Name() == ".git" {
 			return filepath.SkipDir
 		}
-		rel, _ := filepath.Rel(dir, path)
-		if !d.IsDir() && scaffold.IsGitFile(filepath.ToSlash(rel)) {
+		rel, _ := filepath.Rel(dir, p)
+		if !d.IsDir() && match(filepath.ToSlash(rel)) {
 			found = append(found, filepath.ToSlash(rel))
 		}
 		return nil
@@ -36,7 +44,8 @@ func gitFilesOnDisk(t *testing.T, dir string) []string {
 	return found
 }
 
-func manifestGitFiles(t *testing.T, dir string) []string {
+// manifestGitFiles lists the manifest entries that match.
+func manifestGitFiles(t *testing.T, dir string, match func(string) bool) []string {
 	t.Helper()
 	m, err := ReadManifest(dir)
 	if err != nil {
@@ -44,18 +53,19 @@ func manifestGitFiles(t *testing.T, dir string) []string {
 	}
 	var found []string
 	for rel := range m.Files {
-		if scaffold.IsGitFile(rel) {
+		if match(rel) {
 			found = append(found, rel)
 		}
 	}
 	return found
 }
 
-func reportGitFiles(rep UpdateReport) []string {
+// reportGitFiles lists the report entries that match.
+func reportGitFiles(rep UpdateReport, match func(string) bool) []string {
 	var found []string
 	for _, list := range [][]string{rep.Updated, rep.Skipped, rep.Unchanged} {
 		for _, rel := range list {
-			if scaffold.IsGitFile(rel) {
+			if match(rel) {
 				found = append(found, rel)
 			}
 		}
@@ -87,6 +97,21 @@ func setVCS(t *testing.T, dir, vcs string) {
 	}
 }
 
+// requireGitignoreManaged fails unless .gitignore is on disk and in the manifest.
+func requireGitignoreManaged(t *testing.T, dir string) {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); err != nil {
+		t.Fatalf(".gitignore missing: %v", err)
+	}
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Files[".gitignore"]; !ok {
+		t.Fatal(".gitignore not in manifest")
+	}
+}
+
 func localWorkspace(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -97,17 +122,19 @@ func localWorkspace(t *testing.T) string {
 	return dir
 }
 
-// AC5: a local init has no git repo, no git files and records "vcs": "none".
-func TestScaffoldLocalHasNoGit(t *testing.T) {
+// N-0002 AC2: a local init has no git repo and keeps only .gitignore of the git
+// files, and records "vcs": "none".
+func TestScaffoldLocalKeepsOnlyGitignore(t *testing.T) {
 	dir := localWorkspace(t)
 	if _, err := os.Stat(filepath.Join(dir, ".git")); !os.IsNotExist(err) {
 		t.Fatalf(".git exists (err = %v)", err)
 	}
-	if got := gitFilesOnDisk(t, dir); len(got) != 0 {
-		t.Fatalf("git files on disk: %v", got)
+	requireGitignoreManaged(t, dir)
+	if got := gitFilesOnDisk(t, dir, omittedLocally); len(got) != 0 {
+		t.Fatalf("omitted git files on disk: %v", got)
 	}
-	if got := manifestGitFiles(t, dir); len(got) != 0 {
-		t.Fatalf("git files in manifest: %v", got)
+	if got := manifestGitFiles(t, dir, omittedLocally); len(got) != 0 {
+		t.Fatalf("omitted git files in manifest: %v", got)
 	}
 	if got := projectSettings(t, dir)["vcs"]; got != "none" {
 		t.Fatalf("settings vcs = %v, want none", got)
@@ -133,7 +160,7 @@ func TestScaffoldGitKeepsGitFiles(t *testing.T) {
 			t.Fatalf("%s missing: %v", rel, err)
 		}
 	}
-	if len(manifestGitFiles(t, dir)) == 0 {
+	if len(manifestGitFiles(t, dir, scaffold.IsGitFile)) == 0 {
 		t.Fatal("manifest lists no git files")
 	}
 	if _, ok := projectSettings(t, dir)["vcs"]; ok {
@@ -141,32 +168,50 @@ func TestScaffoldGitKeepsGitFiles(t *testing.T) {
 	}
 }
 
-// AC7: update in a local workspace creates and reports no git file.
-func TestUpdateLocalWritesNoGitFiles(t *testing.T) {
+// N-0002 AC3: update on a local workspace made before kiso v0.8.0 (no .gitignore,
+// none in the manifest) creates .gitignore, reports it and records it, and still
+// writes and reports no other git file.
+func TestUpdateLocalAddsGitignoreToV04Workspace(t *testing.T) {
 	dir := localWorkspace(t)
+	if err := os.Remove(filepath.Join(dir, ".gitignore")); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(m.Files, ".gitignore")
+	if err := WriteManifest(dir, m); err != nil {
+		t.Fatal(err)
+	}
 	rep, err := Update(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := gitFilesOnDisk(t, dir); len(got) != 0 {
-		t.Fatalf("git files on disk: %v", got)
+	requireGitignoreManaged(t, dir)
+	if !slices.Contains(rep.Updated, ".gitignore") {
+		t.Fatalf("Updated = %v, want .gitignore", rep.Updated)
 	}
-	if got := reportGitFiles(rep); len(got) != 0 {
-		t.Fatalf("report names git files: %v", got)
+	if got := gitFilesOnDisk(t, dir, omittedLocally); len(got) != 0 {
+		t.Fatalf("omitted git files on disk: %v", got)
+	}
+	if got := reportGitFiles(rep, omittedLocally); len(got) != 0 {
+		t.Fatalf("report names omitted git files: %v", got)
 	}
 }
 
-// AC8: switching git → none leaves git files on disk but stops managing them.
-func TestUpdateGitToNoneLeavesGitFiles(t *testing.T) {
+// N-0002 AC4: switching git → none leaves every git file on disk, keeps
+// .gitignore managed and stops managing the rest.
+func TestUpdateGitToNoneKeepsGitignoreManaged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dir := scaffoldWorkspace(t)
 	before := map[string]string{}
-	for _, rel := range gitFilesOnDisk(t, dir) {
+	for _, rel := range gitFilesOnDisk(t, dir, scaffold.IsGitFile) {
 		data, _ := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
 		before[rel] = string(data)
 	}
-	if len(before) == 0 {
-		t.Fatal("setup: no git files scaffolded")
+	if len(before) == 0 || !slices.Contains(gitFilesOnDisk(t, dir, omittedLocally), ".gitattributes") {
+		t.Fatalf("setup: git files scaffolded = %v", before)
 	}
 	setVCS(t, dir, "none")
 	rep, err := Update(dir)
@@ -179,11 +224,12 @@ func TestUpdateGitToNoneLeavesGitFiles(t *testing.T) {
 			t.Fatalf("%s changed or removed (err = %v)", rel, err)
 		}
 	}
-	if got := manifestGitFiles(t, dir); len(got) != 0 {
-		t.Fatalf("git files still in manifest: %v", got)
+	requireGitignoreManaged(t, dir)
+	if got := manifestGitFiles(t, dir, omittedLocally); len(got) != 0 {
+		t.Fatalf("omitted git files still in manifest: %v", got)
 	}
-	if got := reportGitFiles(rep); len(got) != 0 {
-		t.Fatalf("report names git files: %v", got)
+	if got := reportGitFiles(rep, omittedLocally); len(got) != 0 {
+		t.Fatalf("report names omitted git files: %v", got)
 	}
 }
 
@@ -199,8 +245,9 @@ func TestUpdateNoneToGitRestoresGitFiles(t *testing.T) {
 			t.Fatalf("%s not restored: %v", rel, err)
 		}
 	}
-	if len(manifestGitFiles(t, dir)) == 0 {
-		t.Fatal("manifest lists no git files")
+	// .gitignore is managed under none too, so check the files none leaves out.
+	if got := manifestGitFiles(t, dir, omittedLocally); !slices.Contains(got, ".gitattributes") {
+		t.Fatalf("manifest omitted-locally files = %v, want .gitattributes restored", got)
 	}
 }
 
