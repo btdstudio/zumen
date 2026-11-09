@@ -11,6 +11,7 @@ import (
 	"github.com/btdstudio/kiso/version"
 	"github.com/btdstudio/zumen/internal/cli"
 	"github.com/btdstudio/zumen/internal/icm"
+	"github.com/btdstudio/zumen/internal/settings"
 )
 
 func main() {
@@ -48,7 +49,7 @@ func runInit(args []string) int {
 		case a == "--force":
 			force = true
 		case a == "--help" || a == "-h":
-			fmt.Println("usage: zumen init [dir] [--no-git] [--force]")
+			fmt.Println("usage: zumen init [dir] [--no-git] [--force]  (--no-git: a local workspace, vcs: none)")
 			return 0
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(os.Stderr, "zumen init: unknown flag %s\n", a)
@@ -57,7 +58,12 @@ func runInit(args []string) int {
 			dir = a
 		}
 	}
-	rep, err := icm.Scaffold(dir, icm.Options{NoGit: noGit, Force: force})
+	vcs, err := settings.InitVCS(noGit)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	rep, err := icm.Scaffold(dir, icm.Options{NoGit: noGit, Force: force}, vcs)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

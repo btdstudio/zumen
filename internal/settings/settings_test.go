@@ -90,3 +90,40 @@ func TestGlobalPathHonorsXDGConfigHome(t *testing.T) {
 		t.Fatalf("global path %q should end with zumen/settings.json", GlobalSettingsPath())
 	}
 }
+
+func TestInitVCS(t *testing.T) {
+	cases := []struct {
+		name   string
+		global any // nil: no global file
+		noGit  bool
+		want   string
+		err    bool
+	}{
+		{name: "no global file", want: "git"},
+		{name: "global none", global: map[string]any{"vcs": "none"}, want: "none"},
+		{name: "global git", global: map[string]any{"vcs": "git"}, want: "git"},
+		{name: "no-git overrides global git", global: map[string]any{"vcs": "git"}, noGit: true, want: "none"},
+		{name: "global invalid", global: map[string]any{"vcs": "svn"}, err: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			if c.global != nil {
+				writeSettings(t, GlobalSettingsPath(), c.global)
+			}
+			got, err := InitVCS(c.noGit)
+			if c.err {
+				if err == nil || !strings.Contains(err.Error(), "vcs") {
+					t.Fatalf("err = %v, want an invalid vcs error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Fatalf("InitVCS(%v) = %q, want %q", c.noGit, got, c.want)
+			}
+		})
+	}
+}

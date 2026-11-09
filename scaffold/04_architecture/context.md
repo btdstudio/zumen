@@ -20,4 +20,4 @@ initiatives and tickets cite them.
 
 ## Gate
 Stop after the architecture (and any ADRs) and hand control back for approval. ADRs
-sit outside the spec folder, so commit them yourself before gating.
+sit outside the spec folder, so under `vcs: git` commit them yourself before gating.

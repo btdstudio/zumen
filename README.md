@@ -25,7 +25,7 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 
 | Command | Purpose |
 |---|---|
-| `zumen init [dir]` | scaffold the planning ICM structure |
+| `zumen init [dir] [--no-git]` | scaffold the planning ICM structure; `--no-git` makes a local workspace (`vcs: none`) |
 | `zumen update` | refresh managed files to the installed version |
 | `zumen status` | show the active change's phase/status |
 | `zumen settings` | show/merge settings |
@@ -59,18 +59,19 @@ A change is an initiative, often across many repos, and ends in tickets:
 Each phase stops at a gate for your approval. With the default `gates: block`
 setting, `zumen gate` refuses a phase until the earlier ones are approved or
 skipped. `--force` overrides this and records it in `LOG.md`; `prompt` and `auto`
-warn instead. State changes commit `STATE.json` and `LOG.md` for you, without pushing,
-and gates also commit the change's folders under `specs/`, `01_research/` and
-`02_explore/`.
+warn instead. In a git workspace (the default), state changes commit `STATE.json`
+and `LOG.md` for you, without pushing, and gates also commit the change's folders
+under `specs/`, `01_research/` and `02_explore/`. A local workspace skips the commits;
+see [Version control](#version-control).
 
 ## The workspace
 
 ```
 ├── AGENTS.md          root map + routing table + command list
-├── STATE.json         per-change phase, gates, sources (committed)
-├── LOG.md             gate history (committed)
-├── REPOS.json         logical repos and remotes (committed)
-├── .zumen/            settings + manifest (committed), active change + repo paths (local)
+├── STATE.json         per-change phase, gates, sources (committed under vcs: git)
+├── LOG.md             gate history (committed under vcs: git)
+├── REPOS.json         logical repos and remotes (committed under vcs: git)
+├── .zumen/            settings + manifest (committed under vcs: git), active change + repo paths (local)
 ├── 00_intake/         base source (<id>.md)
 ├── 01_research/       researcher (skippable)
 ├── 02_explore/        explorer + synthesis (skippable)
@@ -80,6 +81,30 @@ and gates also commit the change's folders under `specs/`, `01_research/` and
 ├── 06_publish/        publisher + sync.md
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
+
+## Version control
+
+The `vcs` setting says whether a workspace lives in git. Set it in
+`.zumen/settings.json`, or globally in `~/.config/zumen/settings.json`.
+
+| Value | Behavior |
+|---|---|
+| `git` (default) | `init` runs `git init` and writes `.gitignore`, `.gitattributes` and `.gitkeep` placeholders; state changes commit. Outside a git repo they warn, with a hint to set `"vcs": "none"`. |
+| `none` | The workspace is plain local files: no `git init`, no git files, no commits and no warning. `STATE.json` and `LOG.md` are still written. |
+
+`zumen init --no-git`, or a global `"vcs": "none"`, creates a local workspace and
+records `"vcs": "none"` in its settings. `zumen status` shows the mode. To switch a
+workspace later, change `vcs` and run `zumen update`. Going to `git` restores the git
+files, and you run `git init` yourself. Run `zumen update` before your first `git add`:
+until it restores `.gitignore`, the machine-local `.zumen/active` and
+`.zumen/paths.json` (which holds absolute checkout paths) aren't ignored. Going to
+`none` leaves existing git files on disk, but zumen stops managing them.
+
+A local workspace has no `.gitignore` of its own. If it sits inside another git repo,
+have that repo ignore `.zumen/active` and `.zumen/paths.json`.
+
+The setting covers the planning workspace only. The repos in `REPOS.json` are always
+git checkouts.
 
 ## Tickets
 
