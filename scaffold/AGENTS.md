@@ -99,7 +99,9 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 `vcs` in `.zumen/settings.json` says whether this workspace lives in git: `git`
 (the default) or `none`. Under `vcs: git`, zumen commits workspace state as
 described below. Under `vcs: none` the workspace is plain local files: zumen
-writes the same files but never runs git, and there are no git files to keep.
+writes the same files but never runs git. It keeps `.gitignore`, so
+`.zumen/active` and `.zumen/paths.json` stay out of any enclosing or later git
+repo, but writes no `.gitattributes` or `.gitkeep`.
 
 ## Workflow rules
 
@@ -129,7 +131,7 @@ writes the same files but never runs git, and there are no git files to keep.
 ├── CLAUDE.md
 ├── AGENTS.md
 ├── README.md
-├── .gitignore            # vcs: git only
+├── .gitignore            # keeps .zumen/active and paths.json out of git
 ├── .gitattributes        # vcs: git only
 ├── STATE.json            # per-change phase, gates, sources (committed under vcs: git)
 ├── LOG.md                # gate history (committed under vcs: git)
