@@ -10,7 +10,7 @@ import (
 func scaffoldWorkspace(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if _, err := Scaffold(dir, Options{NoGit: true}); err != nil {
+	if _, err := Scaffold(dir, Options{NoGit: true}, ""); err != nil {
 		t.Fatal(err)
 	}
 	return dir

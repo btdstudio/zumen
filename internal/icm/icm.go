@@ -64,16 +64,29 @@ func seeds() ([]scaffold.Seed, error) {
 	}, nil
 }
 
-// Scaffold writes the embedded tree into dir; see scaffold.Engine.Scaffold.
-func Scaffold(dir string, opts Options) (Report, error) { return engine.Scaffold(dir, opts) }
+// Scaffold writes the embedded tree into dir; see scaffold.Engine.Scaffold. vcs
+// is the new workspace's "vcs" setting ("" means git); under "none" there's no
+// git init and no git files, and the project settings record "vcs": "none".
+func Scaffold(dir string, opts Options, vcs string) (Report, error) {
+	e := engine
+	e.VCS = vcs
+	return e.Scaffold(dir, opts)
+}
 
-// Update moves v1 rooms to their v2 names, then refreshes managed files; see
-// scaffold.Engine.Update.
+// Update moves v1 rooms to their v2 names, then refreshes managed files under the
+// workspace's "vcs" setting; see scaffold.Engine.Update. An invalid setting fails
+// before anything moves.
 func Update(dir string) (UpdateReport, error) {
+	loaded, err := settings.LoadSettings(dir)
+	if err != nil {
+		return UpdateReport{}, err
+	}
 	if _, err := MigrateRooms(dir); err != nil {
 		return UpdateReport{}, err
 	}
-	return engine.Update(dir)
+	e := engine
+	e.VCS = loaded.VCS
+	return e.Update(dir)
 }
 
 // renamedRooms maps v1 room folders to their v2 names, in an order where a new name
