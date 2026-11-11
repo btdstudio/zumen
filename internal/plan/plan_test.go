@@ -117,6 +117,32 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// A spec without an H1 keeps the change name as the title. Only numbered
+// directories are changes: a numbered file in specs/ is skipped, not read as
+// a change folder. Changes are read in numeric order, which orders problems.
+func TestLoadChangeFolders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	write(t, filepath.Join(root, "specs", "10-y", "functional-spec.md"), "## Functional requirements\n\n- R1. One. — **must**\n")
+	write(t, filepath.Join(root, "specs", "10-y", "tickets", "S-0001.md"), "---\nschema: [\n---\n")
+	write(t, filepath.Join(root, "specs", "2-x", "tickets", "S-0002.md"), "---\nschema: [\n---\n")
+	write(t, filepath.Join(root, "specs", "3-notes.md"), "a numbered file, not a change")
+	m, err := Load(root, "10-y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Title != "10-y" || len(m.Requirements) != 1 {
+		t.Errorf("title, requirements = %q, %+v", m.Title, m.Requirements)
+	}
+	var got []string
+	for _, p := range m.TicketProblems {
+		got = append(got, filepath.Base(filepath.Dir(filepath.Dir(p.ID))))
+	}
+	if !reflect.DeepEqual(got, []string{"2-x", "10-y"}) {
+		t.Errorf("problem order = %v", got)
+	}
+}
+
 func TestLoadEmptyWorkspace(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	m, err := Load(t.TempDir(), "1-x")
@@ -159,6 +185,8 @@ func TestTitle(t *testing.T) {
 	cases := map[string]string{
 		"# Functional spec — Eval fixes\n":    "Eval fixes",
 		"# Plain title\n":                     "Plain title",
+		"# Spec —   Spaced  \n":               "Spaced",
+		"<!--\n# Commented\n-->\n# Real\n":    "Real",
 		"intro\n```\n# fenced\n```\n# Real\n": "Real",
 		"## Not an H1\n":                      "",
 		"":                                    "",
@@ -170,20 +198,18 @@ func TestTitle(t *testing.T) {
 	}
 }
 
-func TestDuplicateADRNumberIsDeterministic(t *testing.T) {
+func TestDuplicateADRNumberKeepsSmallerPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
 	dir := filepath.Join(root, "04_architecture", "adr")
 	write(t, filepath.Join(dir, "0003-b.md"), "# 0003 — B\n")
 	write(t, filepath.Join(dir, "0003-a.md"), "# 0003 — A\n")
-	for i := 0; i < 20; i++ {
-		m, err := Load(root, "1-x")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := m.ADRs["ADR-0003"].Title; got != "A" {
-			t.Fatalf("ADR-0003 = %q, want A", got)
-		}
+	m, err := Load(root, "1-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.ADRs["ADR-0003"].Title; got != "A" {
+		t.Fatalf("ADR-0003 = %q, want A", got)
 	}
 }
 

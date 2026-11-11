@@ -107,6 +107,12 @@ func TestDiagrams(t *testing.T) {
 			want:    []Diagram{{"A", 5, "### not a heading\n## nor this"}},
 		},
 		{
+			name:    "a commented-out subsection and fence don't count",
+			body:    "<!--\n### Old\n```mermaid\nold\n```\n-->\n### A\n```mermaid\nnew\n```\n",
+			section: true,
+			want:    []Diagram{{"A", 11, "new"}},
+		},
+		{
 			name:    "the next ## ends the section",
 			body:    "### A\n```mermaid\na\n```\n## Context\n### Not a diagram\n```mermaid\nb\n```\n",
 			section: true,

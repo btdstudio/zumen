@@ -1,3 +1,10 @@
+// Package plan is zumen's read model of a change: the requirements in its
+// functional spec, the diagrams in its architecture, every ticket in the
+// workspace and the ADRs. The gate checks, `tickets check` coverage and the
+// overview all read it, so they agree on what's covered or broken.
+//
+// plan sits below internal/state: it imports internal/adr, internal/settings
+// and kiso's ticket and placeholder packages, never state or cli.
 package plan
 
 import (
@@ -103,10 +110,10 @@ func readIfExists(path string) (text string, ok bool, err error) {
 }
 
 // title is the text after the first "— " of the document's first H1 outside
-// a fence, or the whole H1 text without one.
+// fences and comments, or the whole H1 text without one.
 func title(markdown string) string {
 	for _, l := range scan(markdown) {
-		if l.inFence || !strings.HasPrefix(l.text, "# ") {
+		if !l.prose() || !strings.HasPrefix(l.text, "# ") {
 			continue
 		}
 		h := strings.TrimSpace(l.text[2:])

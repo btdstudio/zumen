@@ -1,10 +1,3 @@
-// Package plan is zumen's read model of a change: the requirements in its
-// functional spec, the diagrams in its architecture, every ticket in the
-// workspace and the ADRs. The gate checks, `tickets check` coverage and the
-// overview all read it, so they agree on what's covered or broken.
-//
-// plan sits below internal/state: it imports internal/adr, internal/settings
-// and kiso's ticket and placeholder packages, never state or cli.
 package plan
 
 import (
@@ -53,7 +46,8 @@ var (
 )
 
 // ParseSpec reads the requirements of a functional spec, following ADR-0005.
-// Only lines under `## Functional requirements` and outside fenced code count.
+// Only lines under `## Functional requirements`, outside fenced code and HTML
+// comments, count.
 // A requirement line is `- R<n>. …` or `- N<n>. …`, and its priority is the
 // first `— **must**`, `— **should**` or `— **could**` on that line. A line
 // holding a template placeholder isn't a requirement. A missing priority is a
@@ -68,7 +62,7 @@ func ParseSpec(markdown string) ([]Requirement, []Finding) {
 	var findings []Finding
 	first := map[string]int{}
 	for _, l := range sectionLines(scan(markdown), specSection) {
-		if l.inFence || placeholders[l.n] {
+		if !l.prose() || placeholders[l.n] {
 			continue
 		}
 		m := requirementRe.FindStringSubmatch(l.text)

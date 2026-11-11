@@ -136,6 +136,46 @@ func TestParseSpec(t *testing.T) {
 			reqs: []req{{"R4", "must", 9}},
 		},
 		{
+			name: "a sub-numbered id is not a requirement",
+			body: "- R1.2 A section number. — **must**\n- R3. Real. — **must**\n",
+			reqs: []req{{"R3", "must", 6}},
+		},
+		{
+			name: "a commented-out requirement doesn't count",
+			body: "<!--\n- R1. Dropped. — **must**\n-->\n- R2. Kept. — **must**\n",
+			reqs: []req{{"R2", "must", 8}},
+		},
+		{
+			name: "a fence inside a comment doesn't hide the rest",
+			body: "<!--\n```\n-->\n- R1. Real. — **must**\n",
+			reqs: []req{{"R1", "must", 8}},
+		},
+		{
+			name: "a one-line comment leaves the lines around it alone",
+			body: "- R1. One. — **must** <!-- a note -->\n<!-- a comment -->\n- R2. Two. — **must**\n",
+			reqs: []req{{"R1", "must", 5}, {"R2", "must", 7}},
+		},
+		{
+			name: "a comment opened at the end of a requirement line keeps it",
+			body: "- R1. One. — **must** <!-- a note\n- R2. Inside. — **must**\n-->\n- R3. Three. — **must**\n",
+			reqs: []req{{"R1", "must", 5}, {"R3", "must", 8}},
+		},
+		{
+			name: "a comment marker in inline code isn't a comment",
+			body: "- R1. Writes `<!--` markers. — **must**\n- R2. Two. — **must**\n",
+			reqs: []req{{"R1", "must", 5}, {"R2", "must", 6}},
+		},
+		{
+			name: "a heading inside a comment doesn't end the section",
+			body: "<!--\n## Old heading\n-->\n- R1. One. — **must**\n",
+			reqs: []req{{"R1", "must", 8}},
+		},
+		{
+			name: "an unclosed comment hides the rest",
+			body: "- R1. One. — **must**\n<!--\n- R2. Hidden. — **must**\n",
+			reqs: []req{{"R1", "must", 5}},
+		},
+		{
 			name: "a placeholder in inline code doesn't hide the line",
 			body: "- R1. Returns `List<T>`. — **must**\n",
 			reqs: []req{{"R1", "must", 5}},
@@ -170,6 +210,13 @@ func TestParseSpecNoSection(t *testing.T) {
 	reqs, findings := ParseSpec("# Spec\n\n- R1. Outside. — **must**\n")
 	if reqs != nil || findings != nil {
 		t.Fatalf("reqs = %v, findings = %v", reqs, findings)
+	}
+}
+
+func TestParseSpecCommentedHeading(t *testing.T) {
+	reqs, _ := ParseSpec("# Spec\n\n<!--\n## Functional requirements\n-->\n- R1. Outside. — **must**\n")
+	if reqs != nil {
+		t.Fatalf("reqs = %+v", reqs)
 	}
 }
 
