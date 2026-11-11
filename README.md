@@ -141,6 +141,21 @@ tool, and the CLI never calls one. A GitHub Issues starter ships in
 `06_publish/sync-examples/`; copy it to `sync.md` and fill in its settings. ADO and
 Jira starters are planned.
 
+## Overview
+
+Each change has a one-page overview, `specs/<change>/README.md`, which hosts show
+when you open the change's folder. It has two regions:
+
+- **Narrative:** about 250 words that you or an agent write.
+- **Generated:** zumen writes the gates, diagrams, work map, dependencies, repos,
+  decisions, requirement traceability and problems.
+
+Everything outside the generated region is yours. `zumen overview` writes it, and
+`zumen overview --check` exits 1 if it's out of date. Under the default `overview:
+auto` setting, gates, reopens and the ticket commands regenerate it, and commit it
+with the transition. Set `"overview": "manual"` to update it only when you run
+`zumen overview`.
+
 ## Handing off to a coding agent
 
 A coding agent picks a ticket up from there, in any harness. In
