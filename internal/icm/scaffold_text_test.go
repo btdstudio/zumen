@@ -59,6 +59,10 @@ func TestScaffoldArchitectureTemplateDiagrams(t *testing.T) {
 // guidance.
 func TestScaffoldGuidanceText(t *testing.T) {
 	for _, tc := range []struct{ file, want string }{
+		{"04_architecture/templates/architecture.md", "Use standard `mermaid`"},
+		{"04_architecture/templates/architecture.md", "about 15 nodes per diagram"},
+		{"04_architecture/templates/architecture.md", "Every repo in the change appears in Layers"},
+		{"04_architecture/templates/architecture.md", "in backticks"},
 		{"04_architecture/personas/architect.md", "Draw the `## Diagrams`"},
 		{"04_architecture/context.md", "`<!-- zumen:narrative -->`"},
 		{"04_architecture/context.md", "about 250 words"},
