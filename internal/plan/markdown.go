@@ -3,11 +3,15 @@ package plan
 import "strings"
 
 // line is one line of a markdown document. n is 1-based; inFence is true for
-// a fence's opening and closing lines and every line between them.
+// a fence's opening and closing lines and every line between them. open and
+// close mark those two lines, and info is an opening line's info string.
 type line struct {
 	n       int
 	text    string
 	inFence bool
+	open    bool
+	close   bool
+	info    string
 }
 
 // scan splits markdown into lines and marks fenced code, with the same rules
@@ -27,10 +31,11 @@ func scan(markdown string) []line {
 		if fenceLen > 0 {
 			l.inFence = true
 			if c, n, rest, ok := fenceMarker(text); ok && c == fenceChar && n >= fenceLen && strings.TrimSpace(rest) == "" {
+				l.close = true
 				fenceLen = 0
 			}
 		} else if c, n, rest, ok := fenceMarker(text); ok && (c == '~' || !strings.Contains(rest, "`")) {
-			l.inFence = true
+			l.inFence, l.open, l.info = true, true, strings.TrimSpace(rest)
 			fenceChar, fenceLen = c, n
 		}
 		out = append(out, l)
@@ -61,14 +66,20 @@ func endsSection(l line) bool {
 	return !l.inFence && (strings.HasPrefix(l.text, "# ") || strings.HasPrefix(l.text, "## "))
 }
 
-// section returns the lines of every section headed exactly by heading
-// (trailing spaces allowed), up to the next `# ` or `## ` heading outside a
-// fence. The heading lines themselves aren't included.
-func section(lines []line, heading string) []line {
+// isHeading reports whether l is exactly the given heading, outside a fence.
+// Trailing spaces are allowed.
+func isHeading(l line, heading string) bool {
+	return !l.inFence && strings.TrimRight(l.text, " \t") == heading
+}
+
+// sectionLines returns the lines of every section headed by heading, up to the
+// next `# ` or `## ` heading outside a fence. The heading lines themselves
+// aren't included.
+func sectionLines(lines []line, heading string) []line {
 	var out []line
 	in := false
 	for _, l := range lines {
-		if !l.inFence && strings.TrimRight(l.text, " \t") == heading {
+		if isHeading(l, heading) {
 			in = true
 			continue
 		}

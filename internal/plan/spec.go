@@ -67,7 +67,7 @@ func ParseSpec(markdown string) ([]Requirement, []Finding) {
 	var reqs []Requirement
 	var findings []Finding
 	first := map[string]int{}
-	for _, l := range section(scan(markdown), specSection) {
+	for _, l := range sectionLines(scan(markdown), specSection) {
 		if l.inFence || placeholders[l.n] {
 			continue
 		}

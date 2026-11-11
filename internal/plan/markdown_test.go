@@ -50,7 +50,7 @@ func TestScanTrimsCR(t *testing.T) {
 	}
 }
 
-func TestSection(t *testing.T) {
+func TestSectionLines(t *testing.T) {
 	doc := strings.Join([]string{
 		"# Title",          // 1
 		"## Wanted  ",      // 2
@@ -68,14 +68,14 @@ func TestSection(t *testing.T) {
 		"e",                // 14
 	}, "\n")
 	var got []int
-	for _, l := range section(scan(doc), "## Wanted") {
+	for _, l := range sectionLines(scan(doc), "## Wanted") {
 		got = append(got, l.n)
 	}
 	want := []int{3, 4, 5, 6, 7, 8, 12}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("section lines = %v, want %v", got, want)
 	}
-	if s := section(scan(doc), "## Missing"); s != nil {
+	if s := sectionLines(scan(doc), "## Missing"); s != nil {
 		t.Fatalf("missing section = %v", s)
 	}
 }
