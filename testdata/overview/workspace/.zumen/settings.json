@@ -1,0 +1,9 @@
+{
+  "adrDir": "04_architecture/adr",
+  "artifactDir": "specs",
+  "baseSource": "",
+  "gates": "block",
+  "sourceDir": "00_intake",
+  "syncFile": "06_publish/sync.md",
+  "vcs": "none"
+}

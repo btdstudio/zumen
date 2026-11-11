@@ -47,6 +47,8 @@ func Run(args []string) int {
 		return runReopen(root, args[1:])
 	case "tickets":
 		return runTickets(root, args[1:])
+	case "overview":
+		return runOverview(root, args[1:])
 	case "repo":
 		return repos.Run(root, "zumen", args[1:], os.Stdout, os.Stderr)
 	case "env":
@@ -82,6 +84,8 @@ Usage:
   zumen tickets mark-published <id> --external <tool>=<item-id>
                                            record a PM tool's id and freeze the ticket
   zumen tickets unfreeze <id> --reason <r> clear a ticket's freeze
+  zumen overview [<change>] [--check] [--stdout]
+                                           write or check the change's README overview
 ` + repos.Usage("zumen") + `  zumen env                                print harness flags for the active change's repos
   zumen check                              validate the embedded scaffold
   zumen version                            print the version
