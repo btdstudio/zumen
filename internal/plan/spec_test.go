@@ -76,19 +76,19 @@ func TestParseSpec(t *testing.T) {
 			name:     "missing priority warns (AC3)",
 			body:     "- R4. A thing with no priority\n",
 			reqs:     []req{{"R4", "", 5}},
-			findings: []Finding{{Warning, "R4", "line 5: R4 has no priority (expected — **must**, — **should** or — **could**)"}},
+			findings: []Finding{{Severity: Warning, ID: "R4", Message: "line 5: R4 has no priority (expected — **must**, — **should** or — **could**)"}},
 		},
 		{
 			name:     "the template's priority alternatives warn",
 			body:     "- R1. A thing. — **must | should | could**\n",
 			reqs:     []req{{"R1", "", 5}},
-			findings: []Finding{{Warning, "R1", "line 5: R1 has no priority (expected — **must**, — **should** or — **could**)"}},
+			findings: []Finding{{Severity: Warning, ID: "R1", Message: "line 5: R1 has no priority (expected — **must**, — **should** or — **could**)"}},
 		},
 		{
 			name:     "priority needs the em dash and a space",
 			body:     "- R1. A thing. —**must**\n- R2. A thing. - **must**\n",
 			reqs:     []req{{"R1", "", 5}, {"R2", "", 6}},
-			findings: []Finding{{Warning, "R1", "line 5: R1 has no priority (expected — **must**, — **should** or — **could**)"}, {Warning, "R2", "line 6: R2 has no priority (expected — **must**, — **should** or — **could**)"}},
+			findings: []Finding{{Severity: Warning, ID: "R1", Message: "line 5: R1 has no priority (expected — **must**, — **should** or — **could**)"}, {Severity: Warning, ID: "R2", Message: "line 6: R2 has no priority (expected — **must**, — **should** or — **could**)"}},
 		},
 		{
 			name: "first priority wins, text after is allowed",
@@ -99,15 +99,15 @@ func TestParseSpec(t *testing.T) {
 			name:     "duplicate id is an error naming both lines (AC4)",
 			body:     "- R2. One. — **must**\n- R3. Other. — **must**\n- R2. Again. — **should**\n",
 			reqs:     []req{{"R2", "must", 5}, {"R3", "must", 6}},
-			findings: []Finding{{Error, "R2", "line 7: R2 is already defined on line 5"}},
+			findings: []Finding{{Severity: Error, ID: "R2", Message: "line 7: R2 is already defined on line 5"}},
 		},
 		{
 			name: "three occurrences give two errors",
 			body: "- R2. One. — **must**\n- R2. Two. — **must**\n- R2. Three. — **must**\n",
 			reqs: []req{{"R2", "must", 5}},
 			findings: []Finding{
-				{Error, "R2", "line 6: R2 is already defined on line 5"},
-				{Error, "R2", "line 7: R2 is already defined on line 5"},
+				{Severity: Error, ID: "R2", Message: "line 6: R2 is already defined on line 5"},
+				{Severity: Error, ID: "R2", Message: "line 7: R2 is already defined on line 5"},
 			},
 		},
 		{

@@ -36,6 +36,7 @@ type Finding struct {
 	Severity Severity
 	ID       string
 	Message  string
+	Change   string // the change it's about; ParseSpec leaves it ""
 }
 
 const specSection = "## Functional requirements"
@@ -71,8 +72,8 @@ func ParseSpec(markdown string) ([]Requirement, []Finding) {
 		}
 		id := m[1] + m[2]
 		if prev, ok := first[id]; ok {
-			findings = append(findings, Finding{Error, id,
-				fmt.Sprintf("line %d: %s is already defined on line %d", l.n, id, prev)})
+			findings = append(findings, Finding{Severity: Error, ID: id,
+				Message: fmt.Sprintf("line %d: %s is already defined on line %d", l.n, id, prev)})
 			continue
 		}
 		first[id] = l.n
@@ -80,8 +81,8 @@ func ParseSpec(markdown string) ([]Requirement, []Finding) {
 		if p := priorityRe.FindStringSubmatch(l.text); p != nil {
 			r.Priority = p[1]
 		} else {
-			findings = append(findings, Finding{Warning, id,
-				fmt.Sprintf("line %d: %s has no priority (expected — **must**, — **should** or — **could**)", l.n, id)})
+			findings = append(findings, Finding{Severity: Warning, ID: id,
+				Message: fmt.Sprintf("line %d: %s has no priority (expected — **must**, — **should** or — **could**)", l.n, id)})
 		}
 		reqs = append(reqs, r)
 	}
