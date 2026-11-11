@@ -149,6 +149,7 @@ func TestCreateCutSlugMatchesAndNumbersOn(t *testing.T) {
 }
 
 // AC3: a legacy name ending in "-" still holds its number; List skips it.
+// Only .md files count.
 func TestNextNumberCountsMalformedNames(t *testing.T) {
 	root := t.TempDir()
 	dir := AdrDir(root, "")
@@ -156,6 +157,10 @@ func TestNextNumberCountsMalformedNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "0003-some-title-.md"), []byte("# 0003 — Some title\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A numbered file that isn't .md doesn't count.
+	if err := os.WriteFile(filepath.Join(dir, "0009-notes.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rec, err := Create(root, "", Options{Title: "Next"})
