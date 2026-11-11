@@ -1,7 +1,9 @@
 # 06_publish — Publisher room
 
-Owns the **publish** phase: syncing tickets to a PM tool, then freezing them. It's a
-run phase: `zumen gate publish in-progress`, then `complete`.
+Owns the **publish** phase: readying the approved tickets, syncing them to a PM tool,
+then freezing them. It's a run phase. Start with `zumen tickets ready --all`, which
+needs breakdown approved, then `zumen gate publish in-progress`, and end with
+`complete`.
 
 The CLI never calls a PM tool. An agent does, following `sync.md`.
 
@@ -15,6 +17,7 @@ The CLI never calls a PM tool. An agent does, following `sync.md`.
 
 ## Output (write)
 - items in the PM tool
+- each ticket's `status: ready` and `ready_hash`, through `zumen tickets ready --all`
 - each ticket's `external` id and `published_hash`, through
   `zumen tickets mark-published`
 

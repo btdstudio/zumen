@@ -14,4 +14,8 @@ Owns the **breakdown** phase: turning the architecture into tickets.
 - `specs/<n>-<slug>/tickets/<ID>.md` — created with `zumen tickets new`
 
 ## Gate
-Run `zumen tickets check`, then stop and hand control back for approval.
+Run `zumen tickets check`, then stop and hand control back for approval, with the
+tickets still drafts. A `!` warning (`ready, but breakdown for … is "…"`) means
+breakdown was reopened after those tickets were readied. Revise them as needed.
+Once breakdown is approved again, each one is re-readied by id with `zumen tickets
+ready <id>`, because `--all` only readies drafts.

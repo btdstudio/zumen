@@ -36,7 +36,7 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen tickets new\|check\|status\|order\|mark-published\|unfreeze` | manage tickets |
+| `zumen tickets new\|check\|status\|order\|ready\|mark-published\|unfreeze` | manage tickets |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags for the active change's repos |
 | `zumen check` | validate the embedded scaffold |
@@ -104,10 +104,13 @@ git checkouts.
 ## Tickets
 
 Tickets are the only interface out of a workspace. Each is one markdown file,
-`specs/<n>-<slug>/tickets/<ID>.md`, local until it's published. After that, the PM
-tool owns it, and the file is a frozen snapshot: `zumen tickets check` flags any edit
-as drift. To change a published ticket, write a new one with `supersedes`, or run
-`zumen tickets unfreeze` so the next sync updates the existing item.
+`specs/<n>-<slug>/tickets/<ID>.md`, local until it's published. Tickets start as
+drafts. Once breakdown is approved, `zumen tickets ready` readies them, and
+`mark-published` freezes only a ready ticket whose parent and predecessors are
+already published. Once a ticket is published, the PM tool owns it, and the file is
+a frozen snapshot: `zumen tickets check` flags any edit as drift. To change a
+published ticket, write a new one with `supersedes`, or run `zumen tickets unfreeze`
+so the next sync updates the existing item.
 
 Publishing is agent work. `06_publish/sync.md` tells an agent how to talk to your PM
 tool, and the CLI never calls one. A GitHub Issues starter ships in

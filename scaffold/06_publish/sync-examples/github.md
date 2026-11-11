@@ -34,6 +34,7 @@ For each ticket in `zumen tickets order` sequence:
 | The ticket | Do |
 |---|---|
 | `status: draft` | Skip it. |
+| Its parent, a `depends_on` ticket or its `supersedes` target has no `external.github` | Don't create or update it. Report it as **blocked**, naming that ticket. |
 | No `external.github` | Create it, as below. |
 | Has the id, and no `published_hash` | Update it, as below, then re-freeze with `mark-published`. |
 | Has the id and a `published_hash` | Skip it. |
@@ -48,6 +49,10 @@ zumen tickets mark-published <id> --external github=<owner>/<repo>#<number>
 `gh issue create` prints the new issue's URL, which ends in the number. Run
 `mark-published` only if the create succeeded: it can't tell a real id from an empty
 one, and it freezes whatever it's given.
+
+If `mark-published` refuses, stop the run. Report its output and the new issue's
+URL: the issue exists, but its id isn't recorded, so a human decides whether to
+record it or close it. Don't retry with `--force`.
 
 Update:
 
