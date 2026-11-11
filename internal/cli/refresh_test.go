@@ -245,3 +245,32 @@ func TestOverviewReadyAcrossChanges(t *testing.T) {
 	inHead(t, root, "ready", authReadme)
 	inHead(t, root, "ready", "specs/2-other-work/README.md")
 }
+
+// R1: zumen settings shows the effective overview value.
+func TestSettingsShowsOverview(t *testing.T) {
+	for _, tc := range []struct{ settings, want string }{
+		{`{"vcs": "none"}`, "overview:    auto\n"},
+		{`{"vcs": "none", "overview": "manual"}`, "overview:    manual\n"},
+	} {
+		root := vcsWorkspace(t, tc.settings)
+		if code, out := captureStdout(t, func() int { return runSettings(root) }); code != 0 || !strings.Contains(out, tc.want) {
+			t.Fatalf("%s: settings = %d, %q", tc.settings, code, out)
+		}
+	}
+}
+
+// A REPOS.json error names the README once, without a doubled "zumen: ".
+func TestOverviewBadReposWarning(t *testing.T) {
+	root := refreshWorkspace(t, `{"vcs": "none"}`, false)
+	if err := os.WriteFile(filepath.Join(root, "REPOS.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, stderr := captureStderr(t, func() int { return runGate(root, []string{"intake", "approved"}) })
+	if code != 0 || !strings.Contains(stderr, "warning: zumen: "+authReadme+": cannot parse ") || strings.Count(stderr, "zumen: ") != 1 {
+		t.Fatalf("gate = %d, %q", code, stderr)
+	}
+	code, _, stderr = overviewRun(t, root, "1-auth-flow", "--check")
+	if code == 0 || strings.Count(stderr, "zumen: ") != 1 {
+		t.Fatalf("overview = %d, %q", code, stderr)
+	}
+}

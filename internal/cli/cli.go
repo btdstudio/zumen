@@ -155,6 +155,7 @@ func runSettings(root string) int {
 	fmt.Printf("artifactDir: %s\n", e.ArtifactDir)
 	fmt.Printf("adrDir:      %s\n", e.AdrDir)
 	fmt.Printf("syncFile:    %s\n", e.SyncFile)
+	fmt.Printf("overview:    %s\n", e.Overview)
 	return 0
 }
 

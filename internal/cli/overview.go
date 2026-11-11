@@ -94,7 +94,7 @@ func buildOverview(root, change string) (merged, existing []byte, rel string, er
 	}
 	merged, existing, rel, err = state.Overview(root, change)
 	if err != nil {
-		return nil, nil, rel, fmt.Errorf("zumen: %s: %w", rel, err)
+		return nil, nil, rel, state.OverviewError(rel, err)
 	}
 	return merged, existing, rel, nil
 }

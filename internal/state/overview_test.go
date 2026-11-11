@@ -1,6 +1,7 @@
 package state
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -134,5 +135,21 @@ func TestRefreshOverviewBadSettings(t *testing.T) {
 	}
 	if _, err := RefreshOverview(root, "1-auth"); err == nil || !strings.Contains(err.Error(), `invalid overview "sometimes"`) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A problem that already says "zumen: " isn't prefixed twice, and still unwraps.
+func TestRefreshOverviewBadRepos(t *testing.T) {
+	root := overviewRoot(t, "")
+	if err := os.WriteFile(filepath.Join(root, "REPOS.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := RefreshOverview(root, "1-auth")
+	if err == nil || !strings.HasPrefix(err.Error(), "zumen: specs/1-auth/README.md: cannot parse ") || strings.Count(err.Error(), "zumen: ") != 1 {
+		t.Fatalf("err = %v", err)
+	}
+	inner := errors.New("zumen: boom")
+	if wrapped := OverviewError("x", inner); wrapped.Error() != "zumen: x: boom" || !errors.Is(wrapped, inner) {
+		t.Fatalf("OverviewError = %v", wrapped)
 	}
 }

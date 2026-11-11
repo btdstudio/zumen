@@ -3,11 +3,11 @@ package state
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/btdstudio/kiso/repos"
 	kiso "github.com/btdstudio/kiso/state"
@@ -28,6 +28,22 @@ func init() {
 
 // OverviewPath is a change's README, relative to the workspace root.
 func OverviewPath(change string) string { return "specs/" + change + "/README.md" }
+
+// OverviewError reports a problem with the README at rel as
+// "zumen: <rel>: <problem>", dropping a "zumen: " prefix the problem already
+// carries. It unwraps to err.
+func OverviewError(rel string, err error) error { return &overviewError{rel, err} }
+
+type overviewError struct {
+	rel string
+	err error
+}
+
+func (e *overviewError) Error() string {
+	return "zumen: " + e.rel + ": " + strings.TrimPrefix(e.err.Error(), "zumen: ")
+}
+
+func (e *overviewError) Unwrap() error { return e.err }
 
 // Overview builds a change's README: the merged file, the file on disk (nil
 // when there's none), and its root-relative path. It doesn't check that the
@@ -107,14 +123,14 @@ func RefreshOverview(root string, changes ...string) (written []string, err erro
 	for _, c := range names {
 		merged, existing, rel, err := Overview(root, c)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("zumen: %s: %w", rel, err))
+			errs = append(errs, OverviewError(rel, err))
 			continue
 		}
 		if existing != nil && bytes.Equal(existing, merged) {
 			continue
 		}
 		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), merged, 0o644); err != nil {
-			errs = append(errs, fmt.Errorf("zumen: %s: %w", rel, err))
+			errs = append(errs, OverviewError(rel, err))
 			continue
 		}
 		written = append(written, rel)
