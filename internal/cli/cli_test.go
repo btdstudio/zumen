@@ -1041,3 +1041,94 @@ func TestTicketsMarkPublishedRefusesClosedAndAmbiguous(t *testing.T) {
 		t.Fatalf("ambiguous parent = %d: %s", code, out)
 	}
 }
+
+func checkOutput(t *testing.T, root string) (int, string) {
+	t.Helper()
+	return captureStdout(t, func() int { return runTickets(root, []string{"check"}) })
+}
+
+func reopen(t *testing.T, root, phase string) {
+	t.Helper()
+	if code := runReopen(root, []string{phase, "--reason", "rework"}); code != 0 {
+		t.Fatalf("reopen %s = %d", phase, code)
+	}
+}
+
+func TestTicketsCheckWarnsAfterBreakdownReopened(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	newReady(t, root, "S-0002", "story", "Logout", "--repo", "app")
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
+	}
+	if code, out := checkOutput(t, root); code != 0 || strings.Contains(out, "!") {
+		t.Fatalf("check before reopen = %d: %s", code, out)
+	}
+	reopen(t, root, "breakdown")
+	code, out := checkOutput(t, root)
+	for _, want := range []string{
+		`! S-0001: ready, but breakdown for 1-auth-flow is "draft"`,
+		`! S-0002: ready, but breakdown for 1-auth-flow is "draft"`,
+		"2 tickets ok, 2 warning(s)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("check output lacks %q", want)
+		}
+	}
+	if code != 0 {
+		t.Fatalf("check with only warnings = %d, want 0:\n%s", code, out)
+	}
+}
+
+func TestTicketsCheckWarningsDontHideErrors(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
+	}
+	reopen(t, root, "breakdown")
+	if err := os.WriteFile(ticketPath(root, "S-0009"), []byte("not a ticket"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := checkOutput(t, root)
+	errAt, warnAt := strings.Index(out, "✗ "), strings.Index(out, "! S-0001")
+	if code != 1 || errAt < 0 || warnAt < 0 || errAt > warnAt || strings.Contains(out, "tickets ok") {
+		t.Fatalf("check with an error and a warning = %d:\n%s", code, out)
+	}
+}
+
+func TestTicketsCheckWarnsUnsetAfterEarlierReopen(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
+	}
+	reopen(t, root, "spec")
+	code, out := checkOutput(t, root)
+	if code != 0 || !strings.Contains(out, `! S-0001: ready, but breakdown for 1-auth-flow is "unset"`) {
+		t.Fatalf("check after reopen spec = %d:\n%s", code, out)
+	}
+}
+
+func TestTicketsCheckNoWarningWhenApprovedOrNotReady(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "S-0001", "story", "Published", "--repo", "app")
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 0 {
+		t.Fatalf("publish = %d: %s", code, out)
+	}
+	newReady(t, root, "S-0002", "story", "Ready", "--repo", "app")
+	if code := runTickets(root, []string{"new", "story", "Draft", "--repo", "app"}); code != 0 {
+		t.Fatal("new draft")
+	}
+	reopen(t, root, "breakdown")
+	code, out := checkOutput(t, root)
+	if code != 0 || strings.Count(out, "! ") != 1 || !strings.Contains(out, "! S-0002: ready") || !strings.Contains(out, "3 tickets ok, 1 warning(s)") {
+		t.Fatalf("check in a reopened change = %d:\n%s", code, out)
+	}
+	if code := runGate(root, []string{"breakdown", "approved"}); code != 0 {
+		t.Fatal("re-approve breakdown")
+	}
+	code, out = checkOutput(t, root)
+	if code != 0 || strings.Contains(out, "!") || !strings.Contains(out, "3 tickets ok\n") || strings.Contains(out, "warning") {
+		t.Fatalf("check after re-approval = %d:\n%s", code, out)
+	}
+}

@@ -222,11 +222,36 @@ func ticketsCheck(root string) (int, error) {
 		return 0, err
 	}
 	problems = append(problems, ticket.ValidateWorkspace(all, reg.Names())...)
+	// A ready ticket whose breakdown was reopened is warned about, not reverted.
+	changes, err := state.ReadChanges(root)
+	if err != nil {
+		return 0, err
+	}
+	var warnings []string
+	for _, t := range all {
+		if t.Status != ticket.StatusReady {
+			continue
+		}
+		var gates map[string]string
+		if c := changes[t.Change]; c != nil {
+			gates = c.Gates
+		}
+		if s := gateStatus(gates, "breakdown"); s != "approved" {
+			warnings = append(warnings, fmt.Sprintf("%s: ready, but breakdown for %s is %q", t.ID, t.Change, s))
+		}
+	}
 	for _, p := range problems {
 		fmt.Printf("✗ %s\n", p)
 	}
+	for _, w := range warnings {
+		fmt.Printf("! %s\n", w)
+	}
 	if len(problems) > 0 {
 		return 1, nil
+	}
+	if len(warnings) > 0 {
+		fmt.Printf("%d tickets ok, %d warning(s)\n", len(all), len(warnings))
+		return 0, nil
 	}
 	fmt.Printf("%d tickets ok\n", len(all))
 	return 0, nil
