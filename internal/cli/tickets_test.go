@@ -131,6 +131,7 @@ func TestTicketsNewRequirements(t *testing.T) {
 	for _, c := range []struct{ list, want string }{
 		{"R1,R9", "R9 isn't in 1-auth-flow's spec"},
 		{"foo,R7", "foo isn't a requirement id (R<n> or N<n>); R7 isn't in 1-auth-flow's spec"},
+		{"xR1,R1x,r1", "xR1 isn't a requirement id (R<n> or N<n>); R1x isn't a requirement id (R<n> or N<n>); r1 isn't a requirement id (R<n> or N<n>)"},
 	} {
 		code, stderr := captureStderr(t, func() int {
 			return runTickets(root, []string{"new", "story", "Bad", "--repo", "app", "--requirements", c.list})

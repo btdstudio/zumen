@@ -123,7 +123,7 @@ func TestProblemsReadyWithoutRequirements(t *testing.T) {
 func TestProblemsADRCitations(t *testing.T) {
 	root := problemsRoot(t, map[string]map[string]string{
 		"1-one": {
-			"S-0001.md": tk("S-0001", "story", "1-one", "draft", "adrs: [ADR-0001, ADR-0009, \"0001\", adr-0001]\n"),
+			"S-0001.md": tk("S-0001", "story", "1-one", "draft", "adrs: [ADR-0001, ADR-0009, \"0001\", adr-0001, xADR-0001, ADR-00012]\n"),
 		},
 	})
 	write(t, filepath.Join(root, ".zumen", "settings.json"), `{"adrDir": "decisions"}`)
@@ -133,6 +133,8 @@ func TestProblemsADRCitations(t *testing.T) {
 		"1-one ! S-0001: cites ADR-0009, but there's no 0009-*.md ADR file",
 		`1-one ! S-0001: adrs entry "0001" isn't of the form ADR-<nnnn>`,
 		`1-one ! S-0001: adrs entry "adr-0001" isn't of the form ADR-<nnnn>`,
+		`1-one ! S-0001: adrs entry "xADR-0001" isn't of the form ADR-<nnnn>`,
+		`1-one ! S-0001: adrs entry "ADR-00012" isn't of the form ADR-<nnnn>`,
 	)
 }
 
@@ -204,5 +206,21 @@ func TestLoadAllMatchesLoad(t *testing.T) {
 	}
 	if !reflect.DeepEqual(one.Requirements, all.Changes[0].Requirements) {
 		t.Fatal("Load's requirements differ from its ChangeSpec's")
+	}
+}
+
+// Load reads a change folder that LoadAll doesn't list (not numbered) directly.
+func TestLoadUnnumberedChange(t *testing.T) {
+	root := checkRoot(t)
+	write(t, filepath.Join(root, "specs", "draft", "functional-spec.md"), "# Functional spec — Draft idea\n\n## Functional requirements\n\n- R1. A. — **must**\n")
+	m, err := Load(root, "draft")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Changes) != 1 || m.Changes[0].Name != "1-probe" {
+		t.Fatalf("changes = %+v", m.Changes)
+	}
+	if !m.HasSpec || m.Title != "Draft idea" || len(m.Requirements) != 1 {
+		t.Fatalf("model = %+v", m)
 	}
 }

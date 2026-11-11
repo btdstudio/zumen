@@ -20,9 +20,8 @@ var adrCitationRe = regexp.MustCompile(`^ADR-(\d{4})$`)
 func Problems(m *Model) []Finding {
 	byChange := map[string][]*ticket.Ticket{}
 	for _, t := range m.Tickets {
-		if c := ticketChange(t); c != "" {
-			byChange[c] = append(byChange[c], t)
-		}
+		c := ticketChange(t)
+		byChange[c] = append(byChange[c], t)
 	}
 	var out []Finding
 	for _, cs := range m.Changes {
@@ -84,12 +83,8 @@ func hasADR(m *Model, citation string) bool {
 	return ok
 }
 
-// ticketChange is the change whose tickets folder holds t, or "" if t isn't in
-// one.
+// ticketChange is the change whose folder holds t. Every ticket in a Model was
+// loaded from specs/<change>/tickets/, so that's the folder two levels up.
 func ticketChange(t *ticket.Ticket) string {
-	dir := filepath.Dir(t.Path)
-	if filepath.Base(dir) != "tickets" {
-		return ""
-	}
-	return filepath.Base(filepath.Dir(dir))
+	return filepath.Base(filepath.Dir(filepath.Dir(t.Path)))
 }
