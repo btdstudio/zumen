@@ -47,10 +47,11 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate (earlier phases must be approved or skipped); `skipped` needs a reason |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
 | `zumen tickets new <type> <title> [--parent <id>] [--repo <name>]` | create a ticket in the active change |
-| `zumen tickets check` | validate every ticket: schema, parents, cycles, repos, drift |
+| `zumen tickets check` | validate every ticket: schema, parents, cycles, repos, readiness, drift. Errors (`✗`) exit 1; warnings (`!`) don't |
 | `zumen tickets status` | list tickets by draft, ready, published and drifted |
 | `zumen tickets order` | list tickets in publish order |
-| `zumen tickets mark-published <id> --external <tool>=<item-id>` | record a PM tool's id and freeze the ticket |
+| `zumen tickets ready <id>... \| --all [--force]` | ready draft tickets once breakdown is approved, all or none |
+| `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags (`--add-dir <path>`) for the active change's repos |
