@@ -20,7 +20,7 @@ const ticketsUsage = `usage:
   zumen tickets status
   zumen tickets order
   zumen tickets ready <id>... | --all [--force]
-  zumen tickets mark-published <id> --external <tool>=<item-id>
+  zumen tickets mark-published <id> --external <tool>=<item-id> [--force]
   zumen tickets unfreeze <id> --reason <r>
 `
 
@@ -268,9 +268,10 @@ func findTicket(root, id string) (*ticket.Ticket, error) {
 	return found, nil
 }
 
-// saveTicket writes a ticket, logs the line and commits both. It takes effect in the
-// same commit, so a sync that fails partway resumes from what's already recorded.
-func saveTicket(root string, t *ticket.Ticket, line string) error {
+// saveTicket writes a ticket, logs the lines and commits them together. It takes
+// effect in the same commit, so a sync that fails partway resumes from what's
+// already recorded.
+func saveTicket(root string, t *ticket.Ticket, lines ...string) error {
 	if err := os.WriteFile(t.Path, t.Bytes(), 0o644); err != nil {
 		return err
 	}
@@ -278,7 +279,11 @@ func saveTicket(root string, t *ticket.Ticket, line string) error {
 	if err != nil {
 		return err
 	}
-	return state.Record(root, []string{t.Change + ": " + line}, filepath.ToSlash(rel))
+	logged := make([]string, len(lines))
+	for i, line := range lines {
+		logged[i] = t.Change + ": " + line
+	}
+	return state.Record(root, logged, filepath.ToSlash(rel))
 }
 
 const readyUsage = "usage: zumen tickets ready <id>... | --all [--force]"
@@ -433,38 +438,124 @@ func ticketsReady(root string, args []string) (int, error) {
 	return 0, nil
 }
 
+const markPublishedUsage = "usage: zumen tickets mark-published <id> --external <tool>=<item-id> [--force]"
+
+// ticketsMarkPublished freezes a ticket with a PM tool's item id. It checks first,
+// and changes nothing if any check fails: the change must be in publish (which
+// --force overrides), the ticket must be validly ready or already published, and
+// everything it links to must have an id in the same tool.
 func ticketsMarkPublished(root string, args []string) (int, error) {
 	var id, external string
+	var force bool
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "--external" && i+1 < len(args):
 			i++
 			external = args[i]
+		case a == "--force":
+			force = true
 		case strings.HasPrefix(a, "-") || id != "":
-			return 0, fmt.Errorf("usage: zumen tickets mark-published <id> --external <tool>=<item-id>")
+			return 0, fmt.Errorf(markPublishedUsage)
 		default:
 			id = a
 		}
 	}
 	tool, itemID, ok := strings.Cut(external, "=")
 	if id == "" || !ok {
-		return 0, fmt.Errorf("usage: zumen tickets mark-published <id> --external <tool>=<item-id>")
+		return 0, fmt.Errorf(markPublishedUsage)
 	}
-	t, err := findTicket(root, id)
+	loaded, unreadable, err := loadTickets(root)
 	if err != nil {
 		return 0, err
 	}
-	if t.Status == ticket.StatusDraft {
-		return 0, fmt.Errorf("zumen: %s is a draft — set status: ready before publishing it", id)
+	byID := map[string][]*ticket.Ticket{}
+	for _, t := range loaded {
+		byID[t.ID] = append(byID[t.ID], t)
 	}
+	switch found := byID[id]; {
+	case len(found) == 0:
+		return 0, fmt.Errorf("zumen: no ticket %s", id)
+	case len(found) > 1:
+		return 0, fmt.Errorf("zumen: more than one ticket has id %s", id)
+	}
+	t := byID[id][0]
+
+	// An unreadable ticket may be a predecessor, so it can't be verified.
+	problems := unreadable
+	var lines []string
+	gates, err := state.ChangeGates(root, t.Change)
+	if err != nil {
+		return 0, err
+	}
+	if status := gates["publish"]; status != "in-progress" {
+		if status == "" {
+			status = "unset"
+		}
+		violation := fmt.Errorf("zumen: mark-published requires publish in-progress for %s (it's %q)", t.Change, status)
+		if err := gatePolicy(root, violation, force); err != nil {
+			problems = append(problems, ticket.Problem{ID: t.Change, Message: err.Error()})
+		} else {
+			lines = append(lines, "override: "+violation.Error())
+		}
+	}
+	problems = append(problems, publishProblems(t, tool, byID)...)
+	if len(problems) > 0 {
+		for _, p := range problems {
+			fmt.Printf("✗ %s\n", p)
+		}
+		return 1, nil
+	}
+
 	if err := t.MarkPublished(tool, itemID); err != nil {
 		return 0, fmt.Errorf("zumen: %v", err)
 	}
-	if err := saveTicket(root, t, fmt.Sprintf("%s published to %s (%s)", id, tool, itemID)); err != nil {
+	lines = append(lines, fmt.Sprintf("%s published to %s (%s)", id, tool, itemID))
+	if err := saveTicket(root, t, lines...); err != nil {
 		return 0, err
 	}
 	fmt.Printf("%s: published to %s (%s)\n", id, tool, itemID)
 	return 0, nil
+}
+
+// publishProblems checks a ticket's status, and that its parent, each depends_on
+// ticket and its supersedes target have an id in tool. Unfrozen counts: the id is
+// what a link needs. None of these can be forced.
+func publishProblems(t *ticket.Ticket, tool string, byID map[string][]*ticket.Ticket) []ticket.Problem {
+	var problems []ticket.Problem
+	add := func(format string, args ...any) {
+		problems = append(problems, ticket.Problem{ID: t.ID, Message: fmt.Sprintf(format, args...)})
+	}
+	switch t.Status {
+	case ticket.StatusDraft:
+		add("is a draft — run `zumen tickets ready %s` first", t.ID)
+	case ticket.StatusReady:
+		problems = append(problems, ticket.ValidateFile(t)...)
+	case ticket.StatusPublished:
+	default:
+		add("can't publish a %s ticket", t.Status)
+	}
+	type ref struct{ role, id string }
+	refs := []ref{{"parent", t.Parent}}
+	for _, d := range t.DependsOn {
+		refs = append(refs, ref{"depends_on", d})
+	}
+	refs = append(refs, ref{"supersedes", t.Supersedes})
+	seen := map[string]bool{}
+	for _, r := range refs {
+		if r.id == "" || seen[r.id] {
+			continue
+		}
+		seen[r.id] = true
+		switch found := byID[r.id]; {
+		case len(found) == 0:
+			add("%s %s not found", r.role, r.id)
+		case len(found) > 1:
+			add("%s %s is ambiguous (more than one ticket has this id)", r.role, r.id)
+		case found[0].External[tool] == "":
+			add("%s %s has no %s id; publish it first", r.role, r.id, tool)
+		}
+	}
+	return problems
 }
 
 func ticketsUnfreeze(root string, args []string) (int, error) {
