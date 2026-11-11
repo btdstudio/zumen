@@ -87,16 +87,16 @@ flowchart LR
 
 | Repo | draft | ready | published | Tickets |
 |---|---|---|---|---|
-| `app` | 2 | 0 | 1 | S-0004, S-0006, T-0007 |
-| `web` | 0 | 1 | 0 | S-0005 |
+| `app` | 2 | 0 | 1 | [S-0004](tickets/S-0004.md), [S-0006](tickets/S-0006.md), [T-0007](tickets/T-0007.md) |
+| `web` | 0 | 1 | 0 | [S-0005](tickets/S-0005.md) |
 
 ## Decisions
 
 | ADR | Title | Status | Cited by |
 |---|---|---|---|
-| [ADR-0001](../../04_architecture/adr/0001-use-signed-tokens.md) | Use signed tokens | accepted | E-0002, S-0004 |
-| [ADR-0002](../../04_architecture/adr/0002-short-sessions.md) | Short sessions | proposed | S-0004 |
-| ADR-0009 | not found |  | T-0007 |
+| [ADR-0001](../../04_architecture/adr/0001-use-signed-tokens.md) | Use signed tokens | accepted | [E-0002](tickets/E-0002.md), [S-0004](tickets/S-0004.md) |
+| [ADR-0002](../../04_architecture/adr/0002-short-sessions.md) | Short sessions | proposed | [S-0004](tickets/S-0004.md) |
+| ADR-0009 | not found |  | [T-0007](tickets/T-0007.md) |
 
 ## Traceability
 
@@ -114,6 +114,6 @@ From [functional-spec.md](functional-spec.md).
 
 - ! R4: must requirement in 1-auth-flow isn't cited by any ticket
 - ! README: narrative is empty
-- ! T-0007: cites ADR-0009, but there's no 0009-*.md ADR file
+- ! [T-0007](tickets/T-0007.md): cites ADR-0009, but there's no 0009-*.md ADR file
 
 <!-- /zumen:generated -->

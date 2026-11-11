@@ -192,32 +192,33 @@ func TestRenderDependenciesTableFallback(t *testing.T) {
 func TestRenderReposDecisionsTraceability(t *testing.T) {
 	m := load(t, map[string]string{
 		"specs/1-auth/functional-spec.md": "# Functional spec — Auth\n\n## Functional requirements\n\n" +
-			"- R1. A. — **must**\n- R2. B. — **must**\n- R3. C. — **should**\n- R4. D.\n- N1. E. — **must**\n",
+			"- R1. A. — **must**\n- R2. B. — **must**\n- R3. C. — **should**\n- R4. D.\n- N1. E. — **must**\n- N2. F. — **must**\n",
 		"specs/1-auth/tickets/E-0001.md":         tk("E-0001", "epic", "Accounts", "1-auth", "draft", "adrs: [ADR-0001]\n"),
 		"specs/1-auth/tickets/S-0002.md":         tk("S-0002", "story", "Sign in", "1-auth", "ready", "requirements: [R1, N1]\nadrs: [ADR-0001, ADR-0009]\n"),
 		"specs/1-auth/tickets/S-0003.md":         tk("S-0003", "story", "Sign out", "1-auth", "draft", "requirements: [R1]\nadrs: [\"0002\"]\n"),
 		"04_architecture/adr/0001-use-tokens.md": "# 0001 — Use tokens\n\n- Status: accepted\n",
 	})
 	out := render(m, nil, false)
-	wantSection(t, out, "Repos", "| Repo | draft | ready | published | Tickets |\n|---|---|---|---|---|\n| `app` | 1 | 1 | 0 | S-0002, S-0003 |")
+	wantSection(t, out, "Repos", "| Repo | draft | ready | published | Tickets |\n|---|---|---|---|---|\n| `app` | 1 | 1 | 0 | [S-0002](tickets/S-0002.md), [S-0003](tickets/S-0003.md) |")
 	wantSection(t, out, "Decisions", "| ADR | Title | Status | Cited by |\n|---|---|---|---|\n"+
-		"| 0002 | not found |  | S-0003 |\n"+
-		"| [ADR-0001](../../04_architecture/adr/0001-use-tokens.md) | Use tokens | accepted | E-0001, S-0002 |\n"+
-		"| ADR-0009 | not found |  | S-0002 |")
+		"| 0002 | not found |  | [S-0003](tickets/S-0003.md) |\n"+
+		"| [ADR-0001](../../04_architecture/adr/0001-use-tokens.md) | Use tokens | accepted | [E-0001](tickets/E-0001.md), [S-0002](tickets/S-0002.md) |\n"+
+		"| ADR-0009 | not found |  | [S-0002](tickets/S-0002.md) |")
 	wantSection(t, out, "Traceability", "From [functional-spec.md](functional-spec.md).\n\n| Req | Priority | Covered by |\n|---|---|---|\n"+
 		"| R1 | must | [S-0002](tickets/S-0002.md), [S-0003](tickets/S-0003.md) |\n"+
 		"| R2 | must | **uncovered** |\n| R3 | should |  |\n| R4 | — |  |\n"+
-		"| N1 | must | [S-0002](tickets/S-0002.md) |")
+		"| N1 | must | [S-0002](tickets/S-0002.md) |\n| N2 | must |  |")
 }
 
 // AC7, and validation, unparsable files, plan findings, sorting and no paths.
 func TestRenderProblems(t *testing.T) {
 	m := load(t, map[string]string{
-		"specs/1-auth/functional-spec.md": "## Functional requirements\n\n- R1. A. — **must**\n",
-		"specs/1-auth/tickets/S-0002.md":  tk("S-0002", "story", "Sign in", "1-auth", "draft", "requirements: [R9]\nparent: F-0099\n"),
-		"specs/1-auth/tickets/S-0003.md":  "---\nschema: [\n---\n",
-		"specs/1-auth/tickets/S-0004.md":  strings.Replace(tk("S-0004", "story", "No id", "1-auth", "draft", ""), "id: S-0004\n", "", 1),
-		"specs/2-other/tickets/S-0007.md": tk("S-0007", "story", "Elsewhere", "2-other", "draft", "parent: F-0098\n"),
+		"specs/1-auth/functional-spec.md":  "## Functional requirements\n\n- R1. A. — **must**\n",
+		"specs/1-auth/tickets/S-0002.md":   tk("S-0002", "story", "Sign in", "1-auth", "draft", "requirements: [R9]\nparent: F-0099\n"),
+		"specs/1-auth/tickets/S-0003.md":   "---\nschema: [\n---\n",
+		"specs/1-auth/tickets/S-0004.md":   strings.Replace(tk("S-0004", "story", "No id", "1-auth", "draft", ""), "id: S-0004\n", "", 1),
+		"specs/2-other/tickets/S-0007.md":  tk("S-0007", "story", "Elsewhere", "2-other", "draft", "parent: F-0098\nrequirements: [R5]\n"),
+		"specs/2-other/functional-spec.md": "## Functional requirements\n\n- R1. Other. — **must**\n- R1. Again. — **must**\n",
 	})
 	approved := render(m, map[string]string{"architecture": "approved"}, true)
 	body := section(t, approved, "Problems")
@@ -225,8 +226,8 @@ func TestRenderProblems(t *testing.T) {
 	want := []string{
 		"- ! R1: must requirement in 1-auth isn't cited by any ticket",
 		"- ! README: narrative is empty",
-		"- ✗ S-0002: cites R9, which isn't in 1-auth's spec",
-		"- ✗ S-0002: parent F-0099 doesn't exist",
+		"- ✗ [S-0002](tickets/S-0002.md): cites R9, which isn't in 1-auth's spec",
+		"- ✗ [S-0002](tickets/S-0002.md): parent F-0099 doesn't exist",
 		"- ✗ tickets/S-0003.md: ",
 		"- ✗ tickets/S-0004.md: ",
 	}
@@ -259,5 +260,16 @@ func TestRenderIsDeterministic(t *testing.T) {
 		if again := render(m, nil, false); again != first {
 			t.Fatalf("render %d differs", i)
 		}
+	}
+}
+
+// The cut is at 40 runes: 40 are kept whole, 41 are cut to 39 plus "…".
+func TestLabelLength(t *testing.T) {
+	forty := strings.Repeat("é", 40)
+	if got := label("S-0001", forty); got != "S-0001 · "+forty {
+		t.Fatalf("40 runes = %q", got)
+	}
+	if got := label("S-0001", forty+"x"); got != "S-0001 · "+strings.Repeat("é", 39)+"…" {
+		t.Fatalf("41 runes = %q", got)
 	}
 }

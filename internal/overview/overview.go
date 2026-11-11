@@ -344,7 +344,7 @@ func (r *renderer) repos() string {
 			rows[t.Repo] = rw
 		}
 		rw.counts[t.Status]++
-		rw.ids = append(rw.ids, t.ID)
+		rw.ids = append(rw.ids, ticketLink(t.ID))
 	}
 	if len(rows) == 0 {
 		return none
@@ -389,7 +389,11 @@ func (r *renderer) decisions() string {
 			name = fmt.Sprintf("[%s](../../%s/%s)", a, filepath.ToSlash(r.in.ADRDir), filepath.Base(rec.Path))
 			title, status = cell(rec.Title), cell(rec.Status)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", name, title, status, strings.Join(citedBy[a], ", "))
+		var by []string
+		for _, id := range citedBy[a] {
+			by = append(by, ticketLink(id))
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", name, title, status, strings.Join(by, ", "))
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
@@ -474,7 +478,11 @@ func (r *renderer) problems() string {
 	})
 	var b strings.Builder
 	for _, it := range items {
-		fmt.Fprintf(&b, "- %s %s: %s\n", it.mark, it.id, it.msg)
+		id := it.id
+		if r.inThis[id] {
+			id = ticketLink(id)
+		}
+		fmt.Fprintf(&b, "- %s %s: %s\n", it.mark, id, it.msg)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }

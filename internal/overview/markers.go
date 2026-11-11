@@ -38,7 +38,6 @@ func lines(text []byte) []string {
 func markers(ls []string) (map[string]int, error) {
 	at := map[string]int{}
 	for i, l := range ls {
-		l = strings.TrimRight(l, "\r\n")
 		for _, m := range markerOrder {
 			if !strings.HasPrefix(l, m) {
 				continue
