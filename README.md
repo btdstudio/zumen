@@ -122,6 +122,19 @@ a frozen snapshot: `zumen tickets check` flags any edit as drift. To change a
 published ticket, write a new one with `supersedes`, or run `zumen tickets unfreeze`
 so the next sync updates the existing item.
 
+A ticket cites what it implements: `requirements: [R1, N2]` from its change's
+`functional-spec.md` (`zumen tickets new … --requirements R1,N2` checks each id),
+and `adrs: [ADR-0005]`. `zumen tickets check` reports a citation of a requirement
+the spec doesn't have, or a duplicate requirement id, as an error (`✗`). These are
+warnings (`!`):
+
+- a `must` R requirement no ticket in the change cites;
+- a ready story or task with no `requirements`;
+- a requirement with no priority;
+- an ADR citation with no matching ADR file.
+
+Breakdown can't be approved while its change has one of these errors.
+
 Publishing is agent work. `06_publish/sync.md` tells an agent how to talk to your PM
 tool, and the CLI never calls one. A GitHub Issues starter ships in
 `06_publish/sync-examples/`; copy it to `sync.md` and fill in its settings. ADO and

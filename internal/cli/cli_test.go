@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -627,7 +628,8 @@ func readyWorkspace(t *testing.T, phase string) string {
 	t.Helper()
 	root := workspace(t)
 	ticketRepo(t, root)
-	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app"}); code != 0 {
+	writeArtifacts(t, root)
+	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app", "--requirements", "R1"}); code != 0 {
 		t.Fatal("new")
 	}
 	fillCriteria(t, root, "S-0001")
@@ -853,6 +855,11 @@ func TestTicketsReadyRefusesWithAnUnreadableTicket(t *testing.T) {
 // newReady makes a ticket with real criteria and readies it. Gates must allow it.
 func newReady(t *testing.T, root, id string, args ...string) {
 	t.Helper()
+	// A ready story or task cites a requirement, or tickets check warns. R1 is
+	// testSpec's, and citing it also covers it.
+	if (args[0] == "story" || args[0] == "task") && !slices.Contains(args, "--requirements") {
+		args = append(args, "--requirements", "R1")
+	}
 	if code := runTickets(root, append([]string{"new"}, args...)); code != 0 {
 		t.Fatalf("tickets new %v = %d", args, code)
 	}

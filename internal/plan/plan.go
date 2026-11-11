@@ -45,42 +45,42 @@ type Model struct {
 	TicketProblems []ticket.Problem // ticket files that couldn't be parsed
 
 	ADRs map[string]adr.Record // "ADR-0001" → record
+
+	Changes []ChangeSpec // every numbered change's spec, by number
 }
 
-// Load reads a change's functional spec and architecture, every ticket in the
-// workspace, and the ADRs. A missing spec or architecture isn't an error: its
-// Has flag is false and its fields are empty. Given the same files, Load
-// returns the same Model.
-func Load(root, change string) (*Model, error) {
-	if change == "" {
-		return nil, errors.New("zumen: plan: no change given")
-	}
-	m := &Model{Change: change, Title: change, ADRs: map[string]adr.Record{}}
+// ChangeSpec is one change's parsed functional spec.
+type ChangeSpec struct {
+	Name         string
+	HasSpec      bool
+	Title        string // the H1 after "— ", or "" without an H1
+	Requirements []Requirement
+	Findings     []Finding // ParseSpec's; Change isn't set
+}
 
-	spec, ok, err := readIfExists(filepath.Join(root, specsDir, change, "functional-spec.md"))
+// LoadAll reads what the whole workspace shares: every numbered change's spec,
+// every ticket, and the ADRs. Change and the single-change fields stay empty.
+// Given the same files, it returns the same Model.
+func LoadAll(root string) (*Model, error) {
+	m := &Model{ADRs: map[string]adr.Record{}}
+	names, err := changeNames(root)
 	if err != nil {
 		return nil, err
 	}
-	if ok {
-		m.HasSpec = true
-		m.Requirements, m.SpecFindings = ParseSpec(spec)
-		if t := title(spec); t != "" {
-			m.Title = t
+	for _, name := range names {
+		cs, err := loadSpec(root, name)
+		if err != nil {
+			return nil, err
 		}
+		m.Changes = append(m.Changes, cs)
+		ts, bad, err := ticket.LoadDir(filepath.Join(root, specsDir, name, "tickets"))
+		if err != nil {
+			return nil, err
+		}
+		m.Tickets = append(m.Tickets, ts...)
+		m.TicketProblems = append(m.TicketProblems, bad...)
 	}
-
-	arch, ok, err := readIfExists(filepath.Join(root, specsDir, change, "architecture.md"))
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		m.HasArchitecture = true
-		m.DiagramSection, m.Diagrams = Diagrams(arch)
-	}
-
-	if m.Tickets, m.TicketProblems, err = loadTickets(root); err != nil {
-		return nil, err
-	}
+	sort.SliceStable(m.Tickets, func(i, j int) bool { return m.Tickets[i].ID < m.Tickets[j].ID })
 
 	loaded, err := settings.LoadSettings(root)
 	if err != nil {
@@ -95,6 +95,67 @@ func Load(root, change string) (*Model, error) {
 		m.ADRs[key] = r
 	}
 	return m, nil
+}
+
+// Load is LoadAll plus one change's spec, title and architecture. A missing
+// spec or architecture isn't an error: its Has flag is false and its fields
+// are empty.
+func Load(root, change string) (*Model, error) {
+	if change == "" {
+		return nil, errors.New("zumen: plan: no change given")
+	}
+	m, err := LoadAll(root)
+	if err != nil {
+		return nil, err
+	}
+	m.Change, m.Title = change, change
+	cs, ok := m.spec(change)
+	if !ok {
+		// Not a numbered change folder, so LoadAll didn't read it.
+		if cs, err = loadSpec(root, change); err != nil {
+			return nil, err
+		}
+	}
+	if cs.HasSpec {
+		m.HasSpec = true
+		m.Requirements, m.SpecFindings = cs.Requirements, cs.Findings
+		if cs.Title != "" {
+			m.Title = cs.Title
+		}
+	}
+
+	arch, ok, err := readIfExists(filepath.Join(root, specsDir, change, "architecture.md"))
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		m.HasArchitecture = true
+		m.DiagramSection, m.Diagrams = Diagrams(arch)
+	}
+	return m, nil
+}
+
+// spec returns a change's entry in Changes.
+func (m *Model) spec(change string) (ChangeSpec, bool) {
+	for _, cs := range m.Changes {
+		if cs.Name == change {
+			return cs, true
+		}
+	}
+	return ChangeSpec{}, false
+}
+
+// loadSpec reads and parses a change's functional spec, if it has one.
+func loadSpec(root, change string) (ChangeSpec, error) {
+	cs := ChangeSpec{Name: change}
+	text, ok, err := readIfExists(filepath.Join(root, specsDir, change, "functional-spec.md"))
+	if err != nil || !ok {
+		return cs, err
+	}
+	cs.HasSpec = true
+	cs.Title = title(text)
+	cs.Requirements, cs.Findings = ParseSpec(text)
+	return cs, nil
 }
 
 // readIfExists reads a file; ok is false if it doesn't exist.
@@ -127,14 +188,15 @@ func title(markdown string) string {
 
 var changeDirRe = regexp.MustCompile(`^(\d+)-`)
 
-// loadTickets reads the tickets of every numbered change folder, sorted by id.
-func loadTickets(root string) ([]*ticket.Ticket, []ticket.Problem, error) {
+// changeNames lists the numbered change folders under specs/, by number then
+// name. A missing specs/ has none.
+func changeNames(root string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, specsDir))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	type change struct {
 		id   int
@@ -156,16 +218,9 @@ func loadTickets(root string) ([]*ticket.Ticket, []ticket.Problem, error) {
 		}
 		return changes[i].name < changes[j].name
 	})
-	var all []*ticket.Ticket
-	var problems []ticket.Problem
-	for _, c := range changes {
-		ts, bad, err := ticket.LoadDir(filepath.Join(root, specsDir, c.name, "tickets"))
-		if err != nil {
-			return nil, nil, err
-		}
-		all = append(all, ts...)
-		problems = append(problems, bad...)
+	names := make([]string, len(changes))
+	for i, c := range changes {
+		names[i] = c.name
 	}
-	sort.SliceStable(all, func(i, j int) bool { return all[i].ID < all[j].ID })
-	return all, problems, nil
+	return names, nil
 }

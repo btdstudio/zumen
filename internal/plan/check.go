@@ -194,6 +194,18 @@ func checkBreakdown(root, change string) []kstate.Problem {
 		}
 		problems = append(problems, kstate.Problem{Path: rel(root, t.Path), Message: msg})
 	}
+	// Citation and spec errors for this change. They aren't about readiness, so
+	// they block whatever the ticket's status.
+	for _, f := range Problems(m) {
+		if f.Change != change || f.Severity != Error {
+			continue
+		}
+		path := artifact(change, "functional-spec.md")
+		if t, ok := byKey[f.ID]; ok {
+			path = rel(root, t.Path)
+		}
+		problems = append(problems, kstate.Problem{Path: path, Message: f.ID + ": " + f.Message})
+	}
 	return problems
 }
 
