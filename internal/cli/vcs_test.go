@@ -256,3 +256,37 @@ func TestVCSNoneRunsNoGitForAnyRecordedCommand(t *testing.T) {
 		}
 	}
 }
+
+// tickets ready records every ticket in one commit, with each ticket file in it.
+func TestTicketsReadyCommitsOnce(t *testing.T) {
+	root := vcsWorkspace(t, "")
+	gitRepo(t, root)
+	if code := runChange(root, []string{"new", "Auth flow"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	ticketRepo(t, root)
+	for _, title := range []string{"Login", "Logout"} {
+		if code := runTickets(root, []string{"new", "story", title, "--repo", "app"}); code != 0 {
+			t.Fatalf("new %s", title)
+		}
+	}
+	fillCriteria(t, root, "S-0001")
+	fillCriteria(t, root, "S-0002")
+	approveThrough(t, root, "breakdown")
+	before := strings.Count(git(t, root, "log", "--format=%s"), "\n")
+	if code := runTickets(root, []string{"ready", "--all"}); code != 0 {
+		t.Fatal("ready --all")
+	}
+	if after := strings.Count(git(t, root, "log", "--format=%s"), "\n"); after != before+1 {
+		t.Fatalf("commits: %d → %d, want exactly one more", before, after)
+	}
+	files := git(t, root, "show", "--name-only", "--format=", "HEAD")
+	for _, want := range []string{"LOG.md", "specs/1-auth-flow/tickets/S-0001.md", "specs/1-auth-flow/tickets/S-0002.md"} {
+		if !strings.Contains(files, want) {
+			t.Fatalf("HEAD lacks %s:\n%s", want, files)
+		}
+	}
+	if status := git(t, root, "status", "--porcelain", "--", "specs"); strings.TrimSpace(status) != "" {
+		t.Fatalf("ticket files left uncommitted:\n%s", status)
+	}
+}

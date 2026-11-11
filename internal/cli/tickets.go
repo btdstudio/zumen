@@ -19,6 +19,7 @@ const ticketsUsage = `usage:
   zumen tickets check
   zumen tickets status
   zumen tickets order
+  zumen tickets ready <id>... | --all [--force]
   zumen tickets mark-published <id> --external <tool>=<item-id>
   zumen tickets unfreeze <id> --reason <r>
 `
@@ -39,6 +40,8 @@ func runTickets(root string, args []string) int {
 		code, err = ticketsStatus(root)
 	case "order":
 		code, err = ticketsOrder(root)
+	case "ready":
+		code, err = ticketsReady(root, args[1:])
 	case "mark-published":
 		code, err = ticketsMarkPublished(root, args[1:])
 	case "unfreeze":
@@ -276,6 +279,158 @@ func saveTicket(root string, t *ticket.Ticket, line string) error {
 		return err
 	}
 	return state.Record(root, []string{t.Change + ": " + line}, filepath.ToSlash(rel))
+}
+
+const readyUsage = "usage: zumen tickets ready <id>... | --all [--force]"
+
+// ticketsReady readies tickets once their change has breakdown approved. It's
+// all-or-nothing: it checks readied copies of every target first, and writes them
+// only when none has a problem.
+func ticketsReady(root string, args []string) (int, error) {
+	var ids []string
+	var all, force bool
+	for _, a := range args {
+		switch {
+		case a == "--all":
+			all = true
+		case a == "--force":
+			force = true
+		case strings.HasPrefix(a, "-"):
+			return 0, fmt.Errorf("zumen tickets ready: unknown flag %q", a)
+		default:
+			ids = append(ids, a)
+		}
+	}
+	if all == (len(ids) > 0) {
+		return 0, fmt.Errorf(readyUsage)
+	}
+	loaded, unreadable, err := loadTickets(root)
+	if err != nil {
+		return 0, err
+	}
+	// An unreadable ticket can't be checked, so the run can't be all-or-nothing.
+	problems := unreadable
+	byID := map[string][]*ticket.Ticket{}
+	for _, t := range loaded {
+		byID[t.ID] = append(byID[t.ID], t)
+	}
+
+	var targets []*ticket.Ticket
+	if all {
+		st, err := state.LoadState(root)
+		if err != nil {
+			return 0, err
+		}
+		if st.Name == "" {
+			return 0, fmt.Errorf("zumen: no active change — run `zumen switch <change>` first")
+		}
+		for _, t := range loaded {
+			if t.Change == st.Name && t.Status == ticket.StatusDraft {
+				targets = append(targets, t)
+			}
+		}
+		if len(targets) == 0 && len(problems) == 0 {
+			fmt.Printf("no draft tickets in %s\n", st.Name)
+			return 0, nil
+		}
+	} else {
+		seen := map[string]bool{}
+		for _, id := range ids {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			switch found := byID[id]; len(found) {
+			case 0:
+				problems = append(problems, ticket.Problem{ID: id, Message: "no such ticket"})
+			case 1:
+				targets = append(targets, found[0])
+			default:
+				problems = append(problems, ticket.Problem{ID: id, Message: "more than one ticket has this id"})
+			}
+		}
+	}
+	targeted := map[string]bool{}
+	for _, t := range targets {
+		targeted[t.ID] = true
+	}
+
+	// The breakdown gate, once per change.
+	var lines []string
+	checked := map[string]bool{}
+	for _, t := range targets {
+		if checked[t.Change] {
+			continue
+		}
+		checked[t.Change] = true
+		gates, err := state.ChangeGates(root, t.Change)
+		if err != nil {
+			return 0, err
+		}
+		status := gates["breakdown"]
+		if status == "approved" {
+			continue
+		}
+		if status == "" {
+			status = "unset"
+		}
+		violation := fmt.Errorf("zumen: tickets ready requires breakdown approved for %s (it's %q)", t.Change, status)
+		if err := gatePolicy(root, violation, force); err != nil {
+			problems = append(problems, ticket.Problem{ID: t.Change, Message: err.Error()})
+			continue
+		}
+		lines = append(lines, t.Change+": override: "+violation.Error())
+	}
+
+	// Check a readied copy of each target.
+	var copies []*ticket.Ticket
+	for _, t := range targets {
+		c, err := ticket.Parse(t.Bytes())
+		if err != nil {
+			return 0, err
+		}
+		c.Path = t.Path
+		if err := c.MarkReady(); err != nil {
+			problems = append(problems, ticket.Problem{ID: t.ID, Message: err.Error()})
+			continue
+		}
+		problems = append(problems, ticket.ValidateFile(c)...)
+		if c.Parent != "" && !targeted[c.Parent] {
+			switch found := byID[c.Parent]; {
+			case len(found) == 0:
+				problems = append(problems, ticket.Problem{ID: t.ID, Message: fmt.Sprintf("parent %s not found", c.Parent)})
+			case found[0].Status != ticket.StatusReady && found[0].Status != ticket.StatusPublished:
+				problems = append(problems, ticket.Problem{ID: t.ID, Message: fmt.Sprintf("parent %s is %s; ready it first or in the same run", c.Parent, found[0].Status)})
+			}
+		}
+		copies = append(copies, c)
+	}
+	if len(problems) > 0 {
+		for _, p := range problems {
+			fmt.Printf("✗ %s\n", p)
+		}
+		return 1, nil
+	}
+
+	var paths []string
+	for _, c := range copies {
+		if err := os.WriteFile(c.Path, c.Bytes(), 0o644); err != nil {
+			return 0, err
+		}
+		rel, err := filepath.Rel(root, c.Path)
+		if err != nil {
+			return 0, err
+		}
+		paths = append(paths, filepath.ToSlash(rel))
+		lines = append(lines, fmt.Sprintf("%s: %s readied", c.Change, c.ID))
+	}
+	if err := state.Record(root, lines, paths...); err != nil {
+		return 0, err
+	}
+	for _, c := range copies {
+		fmt.Printf("%s: ready\n", c.ID)
+	}
+	return 0, nil
 }
 
 func ticketsMarkPublished(root string, args []string) (int, error) {

@@ -482,3 +482,271 @@ func TestTicketsNewRefusesWithoutAnOpenChange(t *testing.T) {
 		t.Fatalf("closed = %d, want 1", code)
 	}
 }
+
+// approveThrough gates the workspace's change in order up to and including phase:
+// intake approved, research skipped, then spec, architecture and breakdown
+// approved. Explore and synthesis already start skipped.
+func approveThrough(t *testing.T, root, phase string) {
+	t.Helper()
+	steps := [][]string{
+		{"intake", "approved"},
+		{"research", "skipped", "--reason", "none needed"},
+		{"spec", "approved"},
+		{"architecture", "approved"},
+		{"breakdown", "approved"},
+	}
+	for _, s := range steps {
+		if code := runGate(root, s); code != 0 {
+			t.Fatalf("gate %v = %d", s, code)
+		}
+		if s[0] == phase {
+			return
+		}
+	}
+	t.Fatalf("unknown phase %q", phase)
+}
+
+func ticketPath(root, id string) string {
+	return filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", id+".md")
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+// fillCriteria replaces the template's placeholder criterion with a real one.
+func fillCriteria(t *testing.T, root, id string) {
+	t.Helper()
+	path := ticketPath(root, id)
+	body := strings.Replace(readFile(t, path), "- [ ] AC1: Given … When … Then …", "- [ ] AC1: Given a user, When they log in, Then they see the dashboard", 1)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// readyWorkspace has a story S-0001 with real criteria, with gates up to phase.
+func readyWorkspace(t *testing.T, phase string) string {
+	t.Helper()
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	fillCriteria(t, root, "S-0001")
+	approveThrough(t, root, phase)
+	return root
+}
+
+func TestTicketsReadyBlockedUntilBreakdownApproved(t *testing.T) {
+	root := readyWorkspace(t, "architecture")
+	if code := runGate(root, []string{"breakdown", "await-approval"}); code != 0 {
+		t.Fatal("breakdown await-approval")
+	}
+	before, logBefore := readFile(t, ticketPath(root, "S-0001")), readLog(t, root)
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001"}) })
+	if code == 0 || !strings.Contains(out, "breakdown") || !strings.Contains(out, "await-approval") {
+		t.Fatalf("ready = %d: %s", code, out)
+	}
+	if after := readFile(t, ticketPath(root, "S-0001")); after != before {
+		t.Fatalf("refused ready changed the file:\n%s", after)
+	}
+	if readLog(t, root) != logBefore {
+		t.Fatal("refused ready wrote to LOG.md")
+	}
+}
+
+func TestTicketsReadyForceOverridesAndLogs(t *testing.T) {
+	root := readyWorkspace(t, "architecture")
+	if code := runTickets(root, []string{"ready", "S-0001", "--force"}); code != 0 {
+		t.Fatalf("ready --force = %d", code)
+	}
+	data := readFile(t, ticketPath(root, "S-0001"))
+	if !strings.Contains(data, "status: ready") || !strings.Contains(data, "ready_hash: \"v2:") {
+		t.Fatalf("ticket:\n%s", data)
+	}
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 0 {
+		t.Fatalf("check = %d: %s", code, out)
+	}
+	log := readLog(t, root)
+	if !strings.Contains(log, "1-auth-flow: override: zumen: tickets ready requires breakdown approved") || !strings.Contains(log, "1-auth-flow: S-0001 readied") {
+		t.Fatalf("log = %s", log)
+	}
+}
+
+func TestTicketsReadyAllIsAllOrNothing(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	if code := runTickets(root, []string{"new", "story", "Logout", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	one, two, logBefore := readFile(t, ticketPath(root, "S-0001")), readFile(t, ticketPath(root, "S-0002")), readLog(t, root)
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "--all"}) })
+	if code != 1 || !strings.Contains(out, "S-0002") || !strings.Contains(out, "Given … When … Then …") {
+		t.Fatalf("ready --all = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != one || readFile(t, ticketPath(root, "S-0002")) != two {
+		t.Fatal("a refused --all changed a ticket")
+	}
+	if readLog(t, root) != logBefore {
+		t.Fatal("a refused --all wrote to LOG.md")
+	}
+}
+
+func TestTicketsReadyRequiresParent(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	for _, c := range [][]string{
+		{"new", "feature", "Accounts"},
+		{"new", "story", "Login", "--parent", "F-0001", "--repo", "app"},
+		{"new", "story", "Orphan", "--parent", "F-0099", "--repo", "app"},
+	} {
+		if code := runTickets(root, c); code != 0 {
+			t.Fatalf("tickets %v = %d", c, code)
+		}
+	}
+	for _, id := range []string{"F-0001", "S-0002", "S-0003"} {
+		fillCriteria(t, root, id)
+	}
+	approveThrough(t, root, "breakdown")
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0002"}) })
+	if code != 1 || !strings.Contains(out, "parent F-0001 is draft") {
+		t.Fatalf("ready story alone = %d: %s", code, out)
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0003"}) })
+	if code != 1 || !strings.Contains(out, "parent F-0099 not found") {
+		t.Fatalf("ready orphan = %d: %s", code, out)
+	}
+	code, out = captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0002", "F-0001"}) })
+	if code != 0 || !strings.Contains(out, "S-0002: ready") || !strings.Contains(out, "F-0001: ready") {
+		t.Fatalf("ready both = %d: %s", code, out)
+	}
+	if !strings.Contains(readFile(t, ticketPath(root, "F-0001")), "status: ready") {
+		t.Fatal("feature not ready")
+	}
+}
+
+func TestTicketsReadyPromptWarns(t *testing.T) {
+	root := readyWorkspace(t, "architecture")
+	setGates(t, root, "prompt")
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatalf("ready under prompt = %d", code)
+	}
+	if !strings.Contains(readFile(t, ticketPath(root, "S-0001")), "status: ready") {
+		t.Fatal("not readied")
+	}
+	if log := readLog(t, root); !strings.Contains(log, "override:") {
+		t.Fatalf("log = %s", log)
+	}
+}
+
+func TestTicketsReadyRefreshesAndRefusesPublished(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
+	}
+	path := ticketPath(root, "S-0001")
+	edited := strings.Replace(readFile(t, path), "they see the dashboard", "they see their dashboard", 1)
+	if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 1 || !strings.Contains(out, "changed since") {
+		t.Fatalf("check after edit = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("re-ready")
+	}
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 0 {
+		t.Fatalf("check after re-ready = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#1"}); code != 0 {
+		t.Fatal("publish")
+	}
+	published := readFile(t, path)
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001"}) }); code != 1 || !strings.Contains(out, "published") {
+		t.Fatalf("ready a published ticket = %d: %s", code, out)
+	}
+	if readFile(t, path) != published {
+		t.Fatal("refused ready changed a published ticket")
+	}
+}
+
+func TestTicketsReadyAllLogsOnce(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	if code := runTickets(root, []string{"new", "story", "Logout", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	fillCriteria(t, root, "S-0002")
+	before := readLog(t, root)
+	if code := runTickets(root, []string{"ready", "--all"}); code != 0 {
+		t.Fatal("ready --all")
+	}
+	added := strings.TrimPrefix(readLog(t, root), before)
+	if n := strings.Count(added, " readied"); n != 2 || strings.Count(added, "\n") != 2 || strings.Contains(added, "override") {
+		t.Fatalf("log gained:\n%s", added)
+	}
+	for _, id := range []string{"S-0001", "S-0002"} {
+		if !strings.Contains(readFile(t, ticketPath(root, id)), "status: ready") {
+			t.Fatalf("%s not ready", id)
+		}
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "--all"}) })
+	if code != 0 || !strings.Contains(out, "no draft tickets in 1-auth-flow") {
+		t.Fatalf("ready --all with no drafts = %d: %s", code, out)
+	}
+}
+
+func TestTicketsReadyUsageErrors(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	for _, args := range [][]string{
+		{"ready"},
+		{"ready", "--force"},
+		{"ready", "S-0001", "--all"},
+		{"ready", "S-0001", "--bogus"},
+	} {
+		if code := runTickets(root, args); code != 1 {
+			t.Errorf("tickets %v = %d, want 1", args, code)
+		}
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001", "S-0099"}) })
+	if code != 1 || !strings.Contains(out, "S-0099: no such ticket") {
+		t.Fatalf("unknown id = %d: %s", code, out)
+	}
+	if strings.Contains(readFile(t, ticketPath(root, "S-0001")), "status: ready") {
+		t.Fatal("a refused run readied S-0001")
+	}
+}
+
+func TestTicketsReadyRefusesWithAnUnreadableTicket(t *testing.T) {
+	root := readyWorkspace(t, "breakdown")
+	bad := ticketPath(root, "S-0002")
+	if err := os.WriteFile(bad, []byte("---\nschema: [\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := readFile(t, ticketPath(root, "S-0001"))
+	for _, args := range [][]string{{"ready", "--all"}, {"ready", "S-0001"}} {
+		code, out := captureStdout(t, func() int { return runTickets(root, args) })
+		if code != 1 || !strings.Contains(out, "S-0002.md") {
+			t.Fatalf("tickets %v = %d: %s", args, code, out)
+		}
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != before {
+		t.Fatal("a refused run readied S-0001")
+	}
+	if err := os.Remove(bad); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ticketPath(root, "S-0001"), []byte(strings.Replace(before, "status: draft", "status: ready", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bad, []byte("---\nschema: [\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "--all"}) })
+	if code != 1 || strings.Contains(out, "no draft tickets") {
+		t.Fatalf("--all with only an unreadable draft = %d: %s", code, out)
+	}
+}
