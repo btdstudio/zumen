@@ -243,6 +243,40 @@ func TestEachChangeKeepsOwnMachine(t *testing.T) {
 	}
 }
 
+func TestChangeGates(t *testing.T) {
+	root := t.TempDir()
+	os.MkdirAll(filepath.Join(SpecsDir(root), "1-auth-flow"), 0o755)
+	st := DefaultState()
+	st.Name = "1-auth-flow"
+	if err := SetGate(&st, "breakdown", "approved", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveState(root, &st); err != nil {
+		t.Fatal(err)
+	}
+	gates, err := ChangeGates(root, "1-auth-flow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gates["breakdown"] != "approved" {
+		t.Fatalf("gates = %v", gates)
+	}
+	gates["breakdown"] = "draft"
+	again, err := ChangeGates(root, "1-auth-flow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again["breakdown"] != "approved" {
+		t.Fatalf("mutating the result changed state: %v", again)
+	}
+	for _, name := range []string{"2-unrecorded", ""} {
+		none, err := ChangeGates(root, name)
+		if err != nil || none == nil || len(none) != 0 {
+			t.Fatalf("ChangeGates(%q) = %v, %v; want an empty map", name, none, err)
+		}
+	}
+}
+
 func TestSwitchRejectsUnknownsAndKnownChangesLists(t *testing.T) {
 	root := t.TempDir()
 	if _, err := SwitchTo(root, "nope"); err == nil || !strings.Contains(err.Error(), "unknown change") {

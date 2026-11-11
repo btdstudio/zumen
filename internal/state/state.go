@@ -124,6 +124,22 @@ func SaveState(root string, st *State) error { return store.Save(root, st) }
 // ReadChanges returns the recorded changes.
 func ReadChanges(root string) (map[string]*State, error) { return store.ReadChanges(root) }
 
+// ChangeGates returns a copy of the named change's gates. A change with no record,
+// or an empty name, has no gates yet, so it gets an empty map.
+func ChangeGates(root, name string) (map[string]string, error) {
+	changes, err := ReadChanges(root)
+	if err != nil {
+		return nil, err
+	}
+	gates := map[string]string{}
+	if c, ok := changes[name]; ok && c != nil {
+		for phase, status := range c.Gates {
+			gates[phase] = status
+		}
+	}
+	return gates, nil
+}
+
 // KnownChanges lists the numbered folders under specs/ sorted by id.
 func KnownChanges(root string) ([]KnownChange, error) { return store.Known(root) }
 
