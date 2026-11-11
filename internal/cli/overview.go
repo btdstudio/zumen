@@ -4,15 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/btdstudio/kiso/repos"
-	"github.com/btdstudio/zumen/internal/overview"
-	"github.com/btdstudio/zumen/internal/plan"
-	"github.com/btdstudio/zumen/internal/settings"
 	"github.com/btdstudio/zumen/internal/state"
 )
 
@@ -97,53 +92,9 @@ func buildOverview(root, change string) (merged, existing []byte, rel string, er
 	if !found {
 		return nil, nil, "", fmt.Errorf("zumen: no change named %q", change)
 	}
-	rel = "specs/" + change + "/README.md"
-
-	m, err := plan.Load(root, change)
+	merged, existing, rel, err = state.Overview(root, change)
 	if err != nil {
-		return nil, nil, "", err
-	}
-	changes, err := state.ReadChanges(root)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	var gates, reasons map[string]string
-	if c := changes[change]; c != nil {
-		gates, reasons = c.Gates, c.Reasons
-	}
-	var phases []string
-	for _, p := range state.Machine.Phases {
-		phases = append(phases, p.Name)
-	}
-	loaded, err := settings.LoadSettings(root)
-	if err != nil {
-		return nil, nil, "", err
-	}
-	reg, err := repos.Load(root, "zumen")
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	existing, err = os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, nil, "", err
-	}
-	base := existing
-	if existing == nil {
-		base = overview.Stub(m.Title)
-	}
-	narrative, err := overview.Narrative(base)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("zumen: %s: %w", rel, err)
-	}
-	region := overview.Render(overview.Input{
-		Model: m, Phases: phases, Gates: gates, Reasons: reasons,
-		Repos: reg.Names(), ADRDir: loaded.Effective.AdrDir,
-		NarrativeEmpty: overview.NarrativeEmpty(narrative),
-	})
-	merged, err = overview.Merge(base, region)
-	if err != nil {
-		return nil, nil, "", fmt.Errorf("zumen: %s: %w", rel, err)
+		return nil, nil, rel, fmt.Errorf("zumen: %s: %w", rel, err)
 	}
 	return merged, existing, rel, nil
 }
