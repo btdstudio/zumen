@@ -82,6 +82,7 @@ func TestCheckArtifactsOnlyOnCheckedTransitions(t *testing.T) {
 		{"spec", "await-approval"}, {"spec", "draft"}, {"architecture", "await-approval"},
 		{"breakdown", "draft"}, {"publish", "in-progress"}, {"publish", "approved"},
 		{"research", "skipped"}, {"intake", "approved"}, {"nonsense", "approved"},
+		{"spec", "await-approval"}, {"architecture", "draft"}, {"breakdown", "await-approval"},
 	} {
 		if ps := CheckArtifacts(root, "1-probe", c[0], c[1]); ps != nil {
 			t.Errorf("%s %s = %v", c[0], c[1], strs(ps))
@@ -200,6 +201,20 @@ func TestCheckBreakdown(t *testing.T) {
 			filepath.Join(tickets, "S-0001.md"):                       storyText("S-0001", "1-probe", "app", "draft", "depends_on: [S-0005]\n"),
 			filepath.Join("specs", "2-other", "tickets", "S-0005.md"): storyText("S-0005", "2-other", "app", "draft", ""),
 		}, nil},
+		{"another change's unparsable file is ignored", map[string]string{
+			filepath.Join(tickets, "S-0001.md"):                       storyText("S-0001", "1-probe", "app", "draft", ""),
+			filepath.Join("specs", "2-other", "tickets", "S-0005.md"): "---\nschema: [\n---\n",
+		}, nil},
+		{"a ready ticket's missing readiness mark doesn't block", map[string]string{
+			filepath.Join(tickets, "S-0001.md"): storyText("S-0001", "1-probe", "app", "ready", ""),
+		}, nil},
+		{"a ready ticket's structural error still blocks", map[string]string{
+			filepath.Join(tickets, "S-0001.md"): storyText("S-0001", "1-probe", "ghost", "ready", ""),
+		}, []string{"specs/1-probe/tickets/S-0001.md: S-0001: repo \"ghost\" isn't registered"}},
+		{"another change's ready tickets keep their own validation", map[string]string{
+			filepath.Join(tickets, "S-0001.md"):                       storyText("S-0001", "1-probe", "app", "draft", "depends_on: [S-0005]\n"),
+			filepath.Join("specs", "2-other", "tickets", "S-0005.md"): storyText("S-0005", "2-other", "app", "ready", ""),
+		}, nil},
 		{"a missing dependency counts against this change", map[string]string{
 			filepath.Join(tickets, "S-0001.md"): storyText("S-0001", "1-probe", "app", "draft", "depends_on: [S-0009]\n"),
 		}, []string{"specs/1-probe/tickets/S-0001.md: S-0001: depends_on S-0009 doesn't exist"}},
@@ -223,6 +238,22 @@ func TestCheckBreakdownUnparsable(t *testing.T) {
 	got := CheckArtifacts(root, "1-probe", "breakdown", "approved")
 	if len(got) != 1 || got[0].Path != "specs/1-probe/tickets/S-0002.md" || got[0].Line != 0 || got[0].Message == "" {
 		t.Fatalf("problems = %v", strs(got))
+	}
+}
+
+// A ticket without a usable id is reported by its path, against its change.
+func TestCheckBreakdownTicketWithoutID(t *testing.T) {
+	root := checkRoot(t)
+	text := strings.Replace(storyText("S-0001", "1-probe", "app", "draft", ""), "id: S-0001\n", "", 1)
+	write(t, filepath.Join(root, "specs", "1-probe", "tickets", "S-0001.md"), text)
+	got := CheckArtifacts(root, "1-probe", "breakdown", "approved")
+	if len(got) == 0 {
+		t.Fatal("a ticket without an id passed")
+	}
+	for _, p := range got {
+		if p.Path != "specs/1-probe/tickets/S-0001.md" || strings.Contains(p.Message, root) {
+			t.Fatalf("problem = %q", p.String())
+		}
 	}
 }
 

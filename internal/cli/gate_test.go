@@ -340,3 +340,39 @@ func TestGateOrderViolationAloneIsOneLine(t *testing.T) {
 		t.Fatalf("stderr = %q, want suffix %q", stderr, want)
 	}
 }
+
+// Reopening breakdown to revise a ready ticket doesn't deadlock: the stale
+// readiness mark doesn't block re-approval, tickets check still reports it,
+// and re-readying after approval clears it (review finding 1).
+func TestGateBreakdownReopenReviseReready(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app"}); code != 0 {
+		t.Fatal("new Login")
+	}
+	fillCriteria(t, root, "S-0001")
+	approveThrough(t, root, "breakdown")
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001"}) }); code != 0 {
+		t.Fatalf("ready = %d: %s", code, out)
+	}
+	reopen(t, root, "breakdown")
+	path := ticketPath(root, "S-0001")
+	if err := os.WriteFile(path, []byte(readFile(t, path)+"\nRevised during the reopened breakdown.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := checkOutput(t, root); code != 1 || !strings.Contains(out, "✗ S-0001: body changed since readied") {
+		t.Fatalf("check before re-approval = %d:\n%s", code, out)
+	}
+	if code, stderr := gateStderr(t, root, "breakdown", "approved"); code != 0 || strings.Contains(stderr, "artifact") {
+		t.Fatalf("re-approve = %d:\n%s", code, stderr)
+	}
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001"}) }); code != 0 {
+		t.Fatalf("re-ready = %d: %s", code, out)
+	}
+	if code, out := checkOutput(t, root); code != 0 || strings.Contains(out, "✗") {
+		t.Fatalf("check after re-ready = %d:\n%s", code, out)
+	}
+	if strings.Contains(readLog(t, root), "override") {
+		t.Fatal("the flow needed an override")
+	}
+}

@@ -34,11 +34,10 @@ func artifact(change, name string) string {
 	return specsDir + "/" + change + "/" + name
 }
 
-// rel makes a path root-relative with / separators, leaving it as it is if it
-// isn't under root.
+// rel makes a path under root root-relative, with / separators.
 func rel(root, path string) string {
-	if r, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(r, "..") {
-		return filepath.ToSlash(r)
+	if r, err := filepath.Rel(root, path); err == nil {
+		path = r
 	}
 	return filepath.ToSlash(path)
 }
@@ -184,7 +183,7 @@ func checkBreakdown(root, change string) []kstate.Problem {
 			byKey[t.ID] = t
 		}
 	}
-	for _, p := range ticket.ValidateWorkspace(m.Tickets, reg.Names()) {
+	for _, p := range ticket.ValidateWorkspace(asDrafts(m.Tickets, byKey), reg.Names()) {
 		t, ok := byKey[p.ID]
 		if !ok {
 			continue
@@ -196,6 +195,25 @@ func checkBreakdown(root, change string) []kstate.Problem {
 		problems = append(problems, kstate.Problem{Path: rel(root, t.Path), Message: msg})
 	}
 	return problems
+}
+
+// asDrafts returns the workspace's tickets with this change's ready tickets
+// validated as drafts. Readiness comes after breakdown: a ready ticket's mark
+// goes stale exactly when breakdown is reopened to revise it, and it can only
+// be re-readied once breakdown is approved again. So the readiness mark doesn't
+// block breakdown (tickets check still reports it), while structural problems
+// such as a missing parent or an unregistered repo still do.
+func asDrafts(all []*ticket.Ticket, mine map[string]*ticket.Ticket) []*ticket.Ticket {
+	out := make([]*ticket.Ticket, len(all))
+	for i, t := range all {
+		out[i] = t
+		if mine[t.Path] == t && t.Status == ticket.StatusReady {
+			draft := *t
+			draft.Status = ticket.StatusDraft
+			out[i] = &draft
+		}
+	}
+	return out
 }
 
 func checkPublish(root, change string) []kstate.Problem {
