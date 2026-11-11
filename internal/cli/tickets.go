@@ -184,6 +184,34 @@ func resolveTicketRepo(root string, st state.State, f *ticket.Ticket) error {
 	return nil
 }
 
+// gateStatus is a change's status for phase, or "unset" when it has none.
+func gateStatus(gates map[string]string, phase string) string {
+	if s := gates[phase]; s != "" {
+		return s
+	}
+	return "unset"
+}
+
+// checkGate checks that change has phase at want, for cmd. When it doesn't, the
+// violation goes through gatePolicy: a refusal comes back as problem, and a
+// violation let through as the override line to log. Both are empty when the
+// gate is at want.
+func checkGate(root, cmd, change, phase, want string, force bool) (override string, problem *ticket.Problem, err error) {
+	gates, err := state.ChangeGates(root, change)
+	if err != nil {
+		return "", nil, err
+	}
+	status := gateStatus(gates, phase)
+	if status == want {
+		return "", nil, nil
+	}
+	violation := fmt.Errorf("zumen: %s requires %s %s for %s (it's %q)", cmd, phase, want, change, status)
+	if err := gatePolicy(root, violation, force); err != nil {
+		return "", &ticket.Problem{ID: change, Message: err.Error()}, nil
+	}
+	return "override: " + violation.Error(), nil, nil
+}
+
 func ticketsCheck(root string) (int, error) {
 	all, problems, err := loadTickets(root)
 	if err != nil {
@@ -368,23 +396,16 @@ func ticketsReady(root string, args []string) (int, error) {
 			continue
 		}
 		checked[t.Change] = true
-		gates, err := state.ChangeGates(root, t.Change)
+		override, problem, err := checkGate(root, "tickets ready", t.Change, "breakdown", "approved", force)
 		if err != nil {
 			return 0, err
 		}
-		status := gates["breakdown"]
-		if status == "approved" {
-			continue
+		if problem != nil {
+			problems = append(problems, *problem)
 		}
-		if status == "" {
-			status = "unset"
+		if override != "" {
+			lines = append(lines, t.Change+": "+override)
 		}
-		violation := fmt.Errorf("zumen: tickets ready requires breakdown approved for %s (it's %q)", t.Change, status)
-		if err := gatePolicy(root, violation, force); err != nil {
-			problems = append(problems, ticket.Problem{ID: t.Change, Message: err.Error()})
-			continue
-		}
-		lines = append(lines, t.Change+": override: "+violation.Error())
 	}
 
 	// Check a readied copy of each target.
@@ -483,20 +504,15 @@ func ticketsMarkPublished(root string, args []string) (int, error) {
 	// An unreadable ticket may be a predecessor, so it can't be verified.
 	problems := unreadable
 	var lines []string
-	gates, err := state.ChangeGates(root, t.Change)
+	override, problem, err := checkGate(root, "mark-published", t.Change, "publish", "in-progress", force)
 	if err != nil {
 		return 0, err
 	}
-	if status := gates["publish"]; status != "in-progress" {
-		if status == "" {
-			status = "unset"
-		}
-		violation := fmt.Errorf("zumen: mark-published requires publish in-progress for %s (it's %q)", t.Change, status)
-		if err := gatePolicy(root, violation, force); err != nil {
-			problems = append(problems, ticket.Problem{ID: t.Change, Message: err.Error()})
-		} else {
-			lines = append(lines, "override: "+violation.Error())
-		}
+	if problem != nil {
+		problems = append(problems, *problem)
+	}
+	if override != "" {
+		lines = append(lines, override)
 	}
 	problems = append(problems, publishProblems(t, tool, byID)...)
 	if len(problems) > 0 {
