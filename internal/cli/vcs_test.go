@@ -58,6 +58,10 @@ func gitRepo(t *testing.T, root string) {
 		{"config", "user.name", "test"},
 		{"config", "user.email", "test@example.com"},
 		{"config", "commit.gpgsign", "false"},
+		// No background gc or maintenance: it can still be writing to .git when
+		// the test's temp dir is removed.
+		{"config", "gc.auto", "0"},
+		{"config", "maintenance.auto", "false"},
 	} {
 		git(t, root, args...)
 	}
