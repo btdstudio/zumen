@@ -1,0 +1,12 @@
+{
+  "repos": {
+    "app": {
+      "remote": "https://github.com/o/app",
+      "defaultBranch": "main"
+    },
+    "web": {
+      "remote": "https://github.com/o/web",
+      "defaultBranch": "main"
+    }
+  }
+}

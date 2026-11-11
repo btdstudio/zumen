@@ -1,0 +1,45 @@
+{
+  "schema": 2,
+  "changes": {
+    "1-auth-flow": {
+      "phase": "publish",
+      "status": "in-progress",
+      "gates": {
+        "architecture": "approved",
+        "breakdown": "approved",
+        "explore": "skipped",
+        "intake": "approved",
+        "publish": "in-progress",
+        "research": "skipped",
+        "spec": "approved",
+        "synthesis": "skipped"
+      },
+      "reasons": {
+        "explore": "no repo in the intake",
+        "research": "the team knows this area",
+        "synthesis": "fewer than two repos in scope"
+      },
+      "sources": [
+        "00_intake/1.md"
+      ],
+      "updatedAt": "2026-11-11T17:01:54.071Z"
+    },
+    "2-other-work": {
+      "phase": "intake",
+      "status": "draft",
+      "gates": {
+        "explore": "skipped",
+        "intake": "draft",
+        "synthesis": "skipped"
+      },
+      "reasons": {
+        "explore": "no repo in the intake",
+        "synthesis": "fewer than two repos in scope"
+      },
+      "sources": [
+        "00_intake/2.md"
+      ],
+      "updatedAt": "2026-11-11T17:01:44.089Z"
+    }
+  }
+}

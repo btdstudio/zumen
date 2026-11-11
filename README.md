@@ -37,6 +37,7 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
 | `zumen tickets new\|check\|status\|order\|ready\|mark-published\|unfreeze` | manage tickets |
+| `zumen overview [<change>] [--check] [--stdout]` | write or check the change's README overview |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags for the active change's repos |
 | `zumen check` | validate the embedded scaffold |

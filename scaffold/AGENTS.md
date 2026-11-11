@@ -53,6 +53,7 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen tickets ready <id>... \| --all [--force]` | ready draft tickets once breakdown is approved, all or none |
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
+| `zumen overview [<change>] [--check] [--stdout]` | write or check `specs/<change>/README.md`: the narrative region is yours, the generated region is rewritten; `--check` exits 1 if it's out of date |
 | `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
 | `zumen env` | print harness flags (`--add-dir <path>`) for the active change's repos |
 | `zumen settings` | show/merge settings |
