@@ -57,14 +57,19 @@ func slugify(text string) string {
 	s = strings.Trim(s, "-")
 	r := []rune(s)
 	if len(r) > 40 {
-		s = string(r[:40])
+		// A cut just after a "-" would leave a name adrFileRe rejects.
+		s = strings.TrimRight(string(r[:40]), "-")
 	}
 	return s
 }
 
 var adrFileRe = regexp.MustCompile(`^(\d{4})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$`)
 
-// NextNumber is the highest NNNN prefix in the store + 1 (1 when empty).
+// adrNumberRe matches any numbered file, valid slug or not.
+var adrNumberRe = regexp.MustCompile(`^(\d{4})-.*\.md$`)
+
+// NextNumber is the highest NNNN prefix in the store + 1 (1 when empty). It
+// counts any NNNN-*.md, so a malformed name never has its number reused.
 func NextNumber(root, adrDir string) int {
 	dir := AdrDir(root, adrDir)
 	entries, err := os.ReadDir(dir)
@@ -73,7 +78,7 @@ func NextNumber(root, adrDir string) int {
 	}
 	max := 0
 	for _, e := range entries {
-		if m := adrFileRe.FindStringSubmatch(e.Name()); m != nil {
+		if m := adrNumberRe.FindStringSubmatch(e.Name()); m != nil {
 			if n, err := strconv.Atoi(m[1]); err == nil && n > max {
 				max = n
 			}
