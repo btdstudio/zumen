@@ -5,12 +5,14 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/btdstudio/kiso/repos"
 	"github.com/btdstudio/kiso/ticket"
 	"github.com/btdstudio/zumen"
+	"github.com/btdstudio/zumen/internal/plan"
 	"github.com/btdstudio/zumen/internal/state"
 )
 
@@ -108,6 +110,9 @@ func ticketsNew(root string, args []string) (int, error) {
 		case a == "--depends" && i+1 < len(args):
 			i++
 			f.DependsOn = strings.Split(args[i], ",")
+		case a == "--requirements" && i+1 < len(args):
+			i++
+			f.Requirements = splitIDs(args[i])
 		case strings.HasPrefix(a, "-"):
 			return 0, fmt.Errorf("zumen tickets new: unknown flag %q", a)
 		default:
@@ -115,7 +120,7 @@ func ticketsNew(root string, args []string) (int, error) {
 		}
 	}
 	if len(pos) != 2 {
-		return 0, fmt.Errorf("usage: zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] (quote a multi-word title)")
+		return 0, fmt.Errorf("usage: zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>] (quote a multi-word title)")
 	}
 	f.Type, f.Title = pos[0], pos[1]
 	st, err := state.LoadState(root)
@@ -129,6 +134,9 @@ func ticketsNew(root string, args []string) (int, error) {
 		return 0, fmt.Errorf("zumen: %s is closed", st.Name)
 	}
 	if err := resolveTicketRepo(root, st, &f); err != nil {
+		return 0, err
+	}
+	if err := checkRequirements(root, st.Name, f.Requirements); err != nil {
 		return 0, err
 	}
 	all, problems, err := loadTickets(root)
@@ -160,6 +168,54 @@ func ticketsNew(root string, args []string) (int, error) {
 	}
 	fmt.Printf("created %s %s\n", f.ID, path)
 	return 0, nil
+}
+
+// splitIDs splits a comma-separated id list, trimming spaces and dropping
+// empty entries and repeats.
+func splitIDs(list string) []string {
+	var ids []string
+	seen := map[string]bool{}
+	for _, id := range strings.Split(list, ",") {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+var requirementIDRe = regexp.MustCompile(`^[RN]\d+$`)
+
+// checkRequirements refuses requirement ids that aren't well formed or aren't
+// in the change's spec, naming every one.
+func checkRequirements(root, change string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	m, err := plan.Load(root, change)
+	if err != nil {
+		return err
+	}
+	defined := map[string]bool{}
+	for _, r := range m.Requirements {
+		defined[r.ID] = true
+	}
+	var bad []string
+	for _, id := range ids {
+		switch {
+		case !requirementIDRe.MatchString(id):
+			bad = append(bad, fmt.Sprintf("%s isn't a requirement id (R<n> or N<n>)", id))
+		case !m.HasSpec:
+			bad = append(bad, fmt.Sprintf("%s can't be checked: %s has no spec", id, change))
+		case !defined[id]:
+			bad = append(bad, fmt.Sprintf("%s isn't in %s's spec", id, change))
+		}
+	}
+	if len(bad) > 0 {
+		return fmt.Errorf("zumen tickets new: %s", strings.Join(bad, "; "))
+	}
+	return nil
 }
 
 // resolveTicketRepo fills in or checks a ticket's repo. A story or task needs one; a
@@ -238,6 +294,18 @@ func ticketsCheck(root string) (int, error) {
 		}
 		if s := gateStatus(gates, "breakdown"); s != "approved" {
 			warnings = append(warnings, fmt.Sprintf("%s: ready, but breakdown for %s is %q", t.ID, t.Change, s))
+		}
+	}
+	// Requirement, coverage and ADR findings for every change (S-0027).
+	m, err := plan.LoadAll(root)
+	if err != nil {
+		return 0, err
+	}
+	for _, f := range plan.Problems(m) {
+		if f.Severity == plan.Error {
+			problems = append(problems, ticket.Problem{ID: f.ID, Message: f.Message})
+		} else {
+			warnings = append(warnings, f.ID+": "+f.Message)
 		}
 	}
 	for _, p := range problems {

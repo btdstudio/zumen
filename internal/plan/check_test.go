@@ -257,6 +257,24 @@ func TestCheckBreakdownTicketWithoutID(t *testing.T) {
 	}
 }
 
+// S-0027: citation and spec errors for this change block breakdown;
+// warnings, and other changes' errors, don't.
+func TestCheckBreakdownCitations(t *testing.T) {
+	root := checkRoot(t)
+	dir := filepath.Join(root, "specs", "1-probe")
+	write(t, filepath.Join(dir, "functional-spec.md"), "## Functional requirements\n\n- R1. A. — **must**\n- R2. B. — **must**\n- R2. Again. — **must**\n")
+	write(t, filepath.Join(dir, "tickets", "S-0001.md"), storyText("S-0001", "1-probe", "app", "ready", "requirements: [R99]\n"))
+	write(t, filepath.Join(root, "specs", "2-other", "tickets", "S-0005.md"), storyText("S-0005", "2-other", "app", "draft", "requirements: [R7]\n"))
+	wantProblems(t, CheckArtifacts(root, "1-probe", "breakdown", "approved"),
+		"specs/1-probe/functional-spec.md: R2: spec of 1-probe: line 5: R2 is already defined on line 4",
+		"specs/1-probe/tickets/S-0001.md: S-0001: cites R99, which isn't in 1-probe's spec")
+
+	// Fixed: the uncovered R1 and R2 are only warnings.
+	write(t, filepath.Join(dir, "functional-spec.md"), "## Functional requirements\n\n- R1. A. — **must**\n- R2. B. — **must**\n")
+	write(t, filepath.Join(dir, "tickets", "S-0001.md"), storyText("S-0001", "1-probe", "app", "draft", ""))
+	wantProblems(t, CheckArtifacts(root, "1-probe", "breakdown", "approved"))
+}
+
 // AC7.
 func TestCheckPublish(t *testing.T) {
 	root := checkRoot(t)
