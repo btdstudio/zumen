@@ -4,6 +4,8 @@
 package settings
 
 import (
+	"fmt"
+
 	core "github.com/btdstudio/kiso/settings"
 )
 
@@ -15,6 +17,7 @@ type Settings struct {
 	ArtifactDir string `json:"artifactDir"`
 	AdrDir      string `json:"adrDir"`
 	SyncFile    string `json:"syncFile"`
+	Overview    string `json:"overview"`
 }
 
 // Loaded is the result of LoadSettings.
@@ -24,7 +27,26 @@ var spec = core.Spec[Settings]{
 	Tool:     "zumen",
 	Defaults: DefaultSettings,
 	Apply:    apply,
-	Validate: func(s *Settings) error { return core.CheckGates("zumen", s.Gates) },
+	Validate: func(s *Settings) error {
+		if err := core.CheckGates("zumen", s.Gates); err != nil {
+			return err
+		}
+		return checkOverview(s.Overview)
+	},
+}
+
+// The overview setting's values: auto regenerates each change's README on gates
+// and ticket commands; manual leaves it to `zumen overview`.
+const (
+	OverviewAuto   = "auto"
+	OverviewManual = "manual"
+)
+
+func checkOverview(v string) error {
+	if v == OverviewAuto || v == OverviewManual {
+		return nil
+	}
+	return fmt.Errorf("zumen: invalid overview %q (expected auto|manual)", v)
 }
 
 func DefaultSettings() Settings {
@@ -35,6 +57,7 @@ func DefaultSettings() Settings {
 		ArtifactDir: "specs",               // per-change artifacts
 		AdrDir:      "04_architecture/adr", // architecture decision records
 		SyncFile:    "06_publish/sync.md",  // how an agent talks to the PM tool
+		Overview:    OverviewAuto,          // auto | manual: regenerate specs/<change>/README.md
 	}
 }
 
@@ -56,6 +79,8 @@ func apply(s *Settings, key string, value any) {
 		s.AdrDir = val
 	case "syncFile":
 		s.SyncFile = val
+	case "overview":
+		s.Overview = val
 	}
 }
 

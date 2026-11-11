@@ -65,6 +65,24 @@ func TestInvalidGatesThrows(t *testing.T) {
 	}
 }
 
+func TestOverviewSetting(t *testing.T) {
+	if d := DefaultSettings().Overview; d != "auto" {
+		t.Fatalf("default overview = %q", d)
+	}
+	for _, v := range []string{"auto", "manual"} {
+		s, err := MergeSettings(map[string]any{"overview": v})
+		if err != nil || s.Overview != v {
+			t.Fatalf("overview %q = %+v, %v", v, s, err)
+		}
+	}
+	for _, v := range []string{"sometimes", "", "Auto"} {
+		_, err := MergeSettings(map[string]any{"overview": v})
+		if err == nil || err.Error() != `zumen: invalid overview "`+v+`" (expected auto|manual)` {
+			t.Fatalf("overview %q: err = %v", v, err)
+		}
+	}
+}
+
 func TestUnreadableJSONThrows(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	root := t.TempDir()
