@@ -5,7 +5,11 @@ team, or a coding agent in tomo, can pick up one at a time.
 
 ## How
 - Work top down: epics, then features, then stories, with tasks only where needed.
-- Create each with `zumen tickets new <type> <title> [--parent <id>] [--repo <name>]`.
+- Create each with
+  `zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--requirements <id,...>]`.
+- Every story and task cites the requirements it satisfies, such as
+  `--requirements R1,N2`, from the change's `functional-spec.md`. `zumen tickets check` warns
+  about a `must` requirement no ticket covers.
 - Give every story and task the one repo it lands in.
 - Record order with `depends_on`, and cite the spec and ADRs in the ticket's context.
 - Write acceptance criteria as Given/When/Then checkboxes. Leave every ticket a

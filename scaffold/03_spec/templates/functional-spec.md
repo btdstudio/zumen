@@ -21,6 +21,9 @@ do not restate it verbatim.>
 
 ## Functional requirements
 
+<!-- One list item per requirement: the id (R<n>. or N<n>.), the text, then an
+em dash and the priority, all on one line. Put detail in sub-items. -->
+
 ### Functional
 
 - R1. <capability, verifiable> — **must | should | could**

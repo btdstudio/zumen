@@ -17,6 +17,14 @@ initiatives and tickets cite them.
 ## Output (write)
 - `specs/<n>-<slug>/architecture.md`
 - `adr/NNNN-<slug>.md` — architecture decision records
+- `specs/<n>-<slug>/README.md` — the narrative region only
+
+## Narrative
+After `architecture.md`, write the README's narrative, between
+`<!-- zumen:narrative -->` and `<!-- /zumen:narrative -->`. It's about 250 words:
+the problem, the shape of the solution, who's affected, and what's out of scope.
+If the README doesn't exist, run `zumen overview` first. zumen rewrites the rest
+of the file.
 
 ## Gate
 Stop after the architecture (and any ADRs) and hand control back for approval. ADRs
