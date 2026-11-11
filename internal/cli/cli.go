@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -188,14 +189,27 @@ func runSwitch(root string, args []string) int {
 // gatePolicy decides whether a gate violation stops the command: "block" refuses
 // it unless forced; "prompt", "auto" and a forced run warn and proceed.
 func gatePolicy(root string, violation error, force bool) error {
+	return gatePolicyAll(root, []string{violation.Error()}, force)
+}
+
+// gatePolicyAll applies the gates setting to several violations at once.
+// Under block without --force it refuses with all of them, so the author sees
+// everything to fix; otherwise each one is a warning.
+func gatePolicyAll(root string, violations []string, force bool) error {
 	loaded, err := settings.LoadSettings(root)
 	if err != nil {
 		return err
 	}
 	if loaded.Effective.Gates == "block" && !force {
-		return fmt.Errorf("%v (pass --force to override)", violation)
+		msg := strings.Join(violations, "\n")
+		if strings.Contains(msg, "\n") {
+			return errors.New(msg + "\n(pass --force to override)")
+		}
+		return errors.New(msg + " (pass --force to override)")
 	}
-	fmt.Fprintf(os.Stderr, "warning: %v\n", violation)
+	for _, v := range violations {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", v)
+	}
 	return nil
 }
 
@@ -371,12 +385,26 @@ func runGate(root string, args []string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
+		// Order and artifact problems go through one policy step, so a refusal
+		// lists them all.
+		var violations []string
 		if violation := state.CheckGate(st, phase, status); violation != nil {
-			if err := gatePolicy(root, violation, force); err != nil {
+			violations = append(violations, violation.Error())
+			notes = append(notes, "override: "+violation.Error())
+		}
+		if problems := state.Machine.CheckArtifacts(root, st.Name, phase, status); len(problems) > 0 {
+			lines := []string{fmt.Sprintf("zumen: %s %s: %d artifact problem(s):", phase, status, len(problems))}
+			for _, p := range problems {
+				lines = append(lines, "  "+p.String())
+				notes = append(notes, "override: "+p.String())
+			}
+			violations = append(violations, strings.Join(lines, "\n"))
+		}
+		if len(violations) > 0 {
+			if err := gatePolicyAll(root, violations, force); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return 1
 			}
-			notes = append(notes, "override: "+violation.Error())
 		}
 	}
 	st, err = state.AdvanceGate(root, phase, status, reason, notes...)

@@ -56,6 +56,7 @@ func TestGateRefusesSkippingAhead(t *testing.T) {
 
 func TestGateFollowsLoopInOrder(t *testing.T) {
 	root := workspace(t)
+	writeArtifacts(t, root)
 	if code := runGate(root, []string{"intake", "approved"}); code != 0 {
 		t.Fatal("intake")
 	}
@@ -66,7 +67,8 @@ func TestGateFollowsLoopInOrder(t *testing.T) {
 		t.Fatal("research")
 	}
 	for _, phase := range []string{"spec", "architecture", "breakdown"} {
-		if code := runGate(root, []string{phase, "approved"}); code != 0 {
+		gate := func() int { return runGate(root, []string{phase, "approved"}) }
+		if code := withStandInTicket(t, root, gate); code != 0 {
 			t.Fatalf("gate %s = %d", phase, code)
 		}
 	}
@@ -175,6 +177,7 @@ func TestChangeNewWithRepoRequiresExplore(t *testing.T) {
 
 func TestReopenClearsLaterApprovals(t *testing.T) {
 	root := workspace(t)
+	writeArtifacts(t, root)
 	if code := runGate(root, []string{"intake", "approved"}); code != 0 {
 		t.Fatal("intake")
 	}
@@ -489,6 +492,7 @@ func TestTicketsNewRefusesWithoutAnOpenChange(t *testing.T) {
 // approved. Explore and synthesis already start skipped.
 func approveThrough(t *testing.T, root, phase string) {
 	t.Helper()
+	writeArtifacts(t, root)
 	steps := [][]string{
 		{"intake", "approved"},
 		{"research", "skipped", "--reason", "none needed"},
@@ -497,7 +501,12 @@ func approveThrough(t *testing.T, root, phase string) {
 		{"breakdown", "approved"},
 	}
 	for _, s := range steps {
-		if code := runGate(root, s); code != 0 {
+		run := func() int { return runGate(root, s) }
+		gate := run
+		if s[0] == "breakdown" {
+			gate = func() int { return withStandInTicket(t, root, run) }
+		}
+		if code := gate(); code != 0 {
 			t.Fatalf("gate %v = %d", s, code)
 		}
 		if s[0] == phase {
@@ -505,6 +514,74 @@ func approveThrough(t *testing.T, root, phase string) {
 		}
 	}
 	t.Fatalf("unknown phase %q", phase)
+}
+
+// testSpec and testArchitecture pass the spec and architecture artifact checks.
+const testSpec = "# Functional spec — Auth flow\n\n## Functional requirements\n\n- R1. Sign in. — **must**\n"
+
+const testArchitecture = "# Architecture — Auth flow\n\n## Diagrams\n\n" +
+	"### Context\n\n```mermaid\nflowchart LR\n  user --> app\n```\n\n" +
+	"### Layers\n\n```mermaid\nflowchart TB\n  cli --> core\n```\n\n" +
+	"### Flow: sign in\n\n```mermaid\nsequenceDiagram\n  user->>app: sign in\n```\n"
+
+// activeChangeDir is the active change's folder.
+func activeChangeDir(t *testing.T, root string) string {
+	t.Helper()
+	st, err := state.LoadState(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return state.ChangeDir(root, st.Name)
+}
+
+// writeArtifacts gives the active change a spec and architecture that pass the
+// gate checks, leaving existing files alone.
+func writeArtifacts(t *testing.T, root string) {
+	t.Helper()
+	dir := activeChangeDir(t, root)
+	for name, text := range map[string]string{"functional-spec.md": testSpec, "architecture.md": testArchitecture} {
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// withStandInTicket runs gate with a valid draft epic in a change that has no
+// tickets yet, then removes it. Breakdown needs a ticket to approve, but many
+// tests create theirs afterwards and expect their ids and counts unchanged.
+// The epic is written directly, so it leaves no LOG.md line.
+func withStandInTicket(t *testing.T, root string, gate func() int) int {
+	t.Helper()
+	dir := filepath.Join(activeChangeDir(t, root), "tickets")
+	if entries, _ := filepath.Glob(filepath.Join(dir, "*.md")); len(entries) > 0 {
+		return gate()
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
+		// The gate would commit the stand-in, and removing it would leave the
+		// tree dirty: a git test creates its tickets before breakdown instead.
+		t.Fatal("withStandInTicket in a git workspace: create a ticket before breakdown")
+	}
+	st, err := state.LoadState(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "E-0001.md")
+	text := "---\nschema: 1\nid: E-0001\ntype: epic\ntitle: Stand-in\nchange: " + st.Name + "\nstatus: draft\n---\n\n## Context\nA stand-in for the gate.\n"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(p)
+	return gate()
 }
 
 // startPublish approves the workspace's change through breakdown and starts publish.
@@ -618,16 +695,19 @@ func TestTicketsReadyRequiresParent(t *testing.T) {
 	for _, c := range [][]string{
 		{"new", "feature", "Accounts"},
 		{"new", "story", "Login", "--parent", "F-0001", "--repo", "app"},
-		{"new", "story", "Orphan", "--parent", "F-0099", "--repo", "app"},
 	} {
 		if code := runTickets(root, c); code != 0 {
 			t.Fatalf("tickets %v = %d", c, code)
 		}
 	}
+	approveThrough(t, root, "breakdown")
+	// The orphan comes after breakdown: its missing parent would block the gate.
+	if code := runTickets(root, []string{"new", "story", "Orphan", "--parent", "F-0099", "--repo", "app"}); code != 0 {
+		t.Fatal("new Orphan")
+	}
 	for _, id := range []string{"F-0001", "S-0002", "S-0003"} {
 		fillCriteria(t, root, id)
 	}
-	approveThrough(t, root, "breakdown")
 	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0002"}) })
 	if code != 1 || !strings.Contains(out, "parent F-0001 is draft") {
 		t.Fatalf("ready story alone = %d: %s", code, out)

@@ -28,11 +28,15 @@ import (
 
 	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/kiso/workspace"
+	"github.com/btdstudio/zumen/internal/plan"
 	"github.com/btdstudio/zumen/internal/settings"
 )
 
-// Machine is the planning loop.
-var Machine = kiso.Machine{Tool: "zumen", Phases: []kiso.Phase{
+// Machine is the planning loop. Check is plan.CheckArtifacts: it's set here,
+// in the literal, because the store copies Machine by value. kiso's Advance
+// never runs it; `zumen gate` does, through CheckArtifacts, and applies the
+// gates policy to what it reports.
+var Machine = kiso.Machine{Tool: "zumen", Check: plan.CheckArtifacts, Phases: []kiso.Phase{
 	{Name: "intake", Kind: kiso.Gated},
 	{Name: "research", Kind: kiso.Gated, Skippable: true},
 	{Name: "explore", Kind: kiso.Gated, Skippable: true},
