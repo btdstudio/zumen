@@ -46,7 +46,7 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate (earlier phases must be approved or skipped); `skipped` needs a reason |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>]` | create a ticket in the active change |
+| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--requirements <id,...>]` | create a ticket in the active change, citing the spec's requirements |
 | `zumen tickets check` | validate every ticket: schema, parents, cycles, repos, readiness, drift. Errors (`✗`) exit 1; warnings (`!`) don't |
 | `zumen tickets status` | list tickets by draft, ready, published and drifted |
 | `zumen tickets order` | list tickets in publish order |

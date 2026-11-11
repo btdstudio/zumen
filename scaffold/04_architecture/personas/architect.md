@@ -10,6 +10,9 @@ criteria, and records durable decisions as ADRs.
 - Ground integration points in `file:line`.
 - Record design decisions with rationale and rejected alternatives.
 - Write `specs/<n>-<slug>/architecture.md` from `templates/architecture.md`.
+- Draw the `## Diagrams` (Context, Layers and a Flow per main flow) before
+  writing about components. They're part of the deliverable, and the gate
+  refuses the architecture without them. Keep the prose and diagrams consistent.
 - For decisions with lasting impact, write an ADR (`zumen adr new`).
 
 ## Guardrails
@@ -18,4 +21,5 @@ criteria, and records durable decisions as ADRs.
 - Stay at the system level. How a ticket lands in one repo is decided in tomo.
 
 ## Output
-Decisions (made/rejected), ADRs, and the deferred/risky items. Stop for the gate.
+The diagrams, decisions (made/rejected), ADRs, and the deferred/risky items.
+Stop for the gate.

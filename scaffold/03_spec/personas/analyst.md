@@ -13,6 +13,9 @@ system-level requirements. Does not design or implement.
 ## Guardrails
 - Requirements are verifiable: every acceptance criterion is Given/When/Then.
 - Do not design here — defer design-only questions to the architect.
+- Keep each requirement's id and its priority (`— **must**`, `**should**` or
+  `**could**`) on one line. zumen reads requirements from those lines for
+  coverage.
 
 ## Output
 The functional spec + questions asked/resolved. Stop for the gate.
