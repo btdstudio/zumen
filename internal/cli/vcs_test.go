@@ -58,6 +58,10 @@ func gitRepo(t *testing.T, root string) {
 		{"config", "user.name", "test"},
 		{"config", "user.email", "test@example.com"},
 		{"config", "commit.gpgsign", "false"},
+		// No background gc or maintenance: it can still be writing to .git when
+		// the test's temp dir is removed.
+		{"config", "gc.auto", "0"},
+		{"config", "maintenance.auto", "false"},
 	} {
 		git(t, root, args...)
 	}
@@ -216,7 +220,6 @@ func TestVCSNoneRunsNoGitForAnyRecordedCommand(t *testing.T) {
 	root := vcsWorkspace(t, `{"vcs": "none"}`)
 	ticketRepo(t, root) // before git is faked: the repo registry is out of scope
 	marker := fakeGit(t)
-	ticketPath := filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0001.md")
 	steps := []struct {
 		name string
 		run  func() int
@@ -225,14 +228,13 @@ func TestVCSNoneRunsNoGitForAnyRecordedCommand(t *testing.T) {
 		{"gate", func() int { return runGate(root, []string{"intake", "approved"}) }},
 		{"reopen", func() int { return runReopen(root, []string{"intake", "--reason", "rethink"}) }},
 		{"tickets new", func() int { return runTickets(root, []string{"new", "story", "A", "--repo", "app"}) }},
+		{"gates through publish", func() int {
+			fillCriteria(t, root, "S-0001")
+			startPublish(t, root)
+			return 0
+		}},
+		{"tickets ready", func() int { return runTickets(root, []string{"ready", "S-0001"}) }},
 		{"tickets mark-published", func() int {
-			draft, err := os.ReadFile(ticketPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(ticketPath, []byte(strings.Replace(string(draft), "status: draft", "status: ready", 1)), 0o644); err != nil {
-				t.Fatal(err)
-			}
 			return runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#7"})
 		}},
 		{"change close", func() int { return runChange(root, []string{"close", "1-auth-flow", "--reason", "done"}) }},
@@ -288,5 +290,31 @@ func TestTicketsReadyCommitsOnce(t *testing.T) {
 	}
 	if status := git(t, root, "status", "--porcelain", "--", "specs"); strings.TrimSpace(status) != "" {
 		t.Fatalf("ticket files left uncommitted:\n%s", status)
+	}
+}
+
+// A forced mark-published logs its override and the publish in one commit.
+func TestTicketsMarkPublishedCommitsOnce(t *testing.T) {
+	root := vcsWorkspace(t, "")
+	gitRepo(t, root)
+	if code := runChange(root, []string{"new", "Auth flow"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	ticketRepo(t, root)
+	approveThrough(t, root, "breakdown")
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	before := strings.Count(git(t, root, "log", "--format=%s"), "\n")
+	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=o/r#1", "--force"}); code != 0 {
+		t.Fatal("mark-published --force")
+	}
+	if after := strings.Count(git(t, root, "log", "--format=%s"), "\n"); after != before+1 {
+		t.Fatalf("commits: %d → %d, want exactly one more", before, after)
+	}
+	diff := git(t, root, "show", "--format=", "HEAD", "--", "LOG.md")
+	if !strings.Contains(diff, "override:") || !strings.Contains(diff, "S-0001 published to github") {
+		t.Fatalf("HEAD's LOG.md change lacks a line:\n%s", diff)
+	}
+	if status := git(t, root, "status", "--porcelain", "--", "specs", "LOG.md"); strings.TrimSpace(status) != "" {
+		t.Fatalf("left uncommitted:\n%s", status)
 	}
 }

@@ -417,12 +417,13 @@ func TestTicketsPublishUnfreezeAndDrift(t *testing.T) {
 		t.Fatal("new")
 	}
 	path := filepath.Join(state.ChangeDir(root, "1-auth-flow"), "tickets", "S-0001.md")
+	fillCriteria(t, root, "S-0001")
+	startPublish(t, root)
 	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "ado=1"}); code != 1 {
 		t.Fatalf("publishing a draft = %d, want 1", code)
 	}
-	draft, _ := os.ReadFile(path)
-	if err := os.WriteFile(path, []byte(strings.Replace(string(draft), "status: draft", "status: ready", 1)), 0o644); err != nil {
-		t.Fatal(err)
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
 	}
 	for _, args := range [][]string{
 		{"mark-published", "S-0001"},
@@ -504,6 +505,21 @@ func approveThrough(t *testing.T, root, phase string) {
 		}
 	}
 	t.Fatalf("unknown phase %q", phase)
+}
+
+// startPublish approves the workspace's change through breakdown and starts publish.
+func startPublish(t *testing.T, root string) {
+	t.Helper()
+	approveThrough(t, root, "breakdown")
+	if code := runGate(root, []string{"publish", "in-progress"}); code != 0 {
+		t.Fatalf("publish in-progress = %d", code)
+	}
+}
+
+// markPublished runs `tickets mark-published` with args and returns its stdout.
+func markPublished(t *testing.T, root string, args ...string) (int, string) {
+	t.Helper()
+	return captureStdout(t, func() int { return runTickets(root, append([]string{"mark-published"}, args...)) })
 }
 
 func ticketPath(root, id string) string {
@@ -662,6 +678,9 @@ func TestTicketsReadyRefreshesAndRefusesPublished(t *testing.T) {
 	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"check"}) }); code != 0 {
 		t.Fatalf("check after re-ready = %d: %s", code, out)
 	}
+	if code := runGate(root, []string{"publish", "in-progress"}); code != 0 {
+		t.Fatal("publish in-progress")
+	}
 	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=org/app#1"}); code != 0 {
 		t.Fatal("publish")
 	}
@@ -748,5 +767,277 @@ func TestTicketsReadyRefusesWithAnUnreadableTicket(t *testing.T) {
 	code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "--all"}) })
 	if code != 1 || strings.Contains(out, "no draft tickets") {
 		t.Fatalf("--all with only an unreadable draft = %d: %s", code, out)
+	}
+}
+
+// newReady makes a ticket with real criteria and readies it. Gates must allow it.
+func newReady(t *testing.T, root, id string, args ...string) {
+	t.Helper()
+	if code := runTickets(root, append([]string{"new"}, args...)); code != 0 {
+		t.Fatalf("tickets new %v = %d", args, code)
+	}
+	fillCriteria(t, root, id)
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", id}) }); code != 0 {
+		t.Fatalf("ready %s = %d: %s", id, code, out)
+	}
+}
+
+func TestTicketsMarkPublishedNeedsPublishGate(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	approveThrough(t, root, "breakdown")
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	before, logBefore := readFile(t, ticketPath(root, "S-0001")), readLog(t, root)
+	code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1")
+	if code != 1 || !strings.Contains(out, `requires publish in-progress for 1-auth-flow (it's "unset")`) {
+		t.Fatalf("mark-published = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != before || readLog(t, root) != logBefore {
+		t.Fatal("a refused mark-published changed the ticket or LOG.md")
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1", "--force"); code != 0 {
+		t.Fatalf("mark-published --force = %d: %s", code, out)
+	}
+	if !strings.Contains(readFile(t, ticketPath(root, "S-0001")), "status: published") {
+		t.Fatal("not published")
+	}
+	added := strings.TrimPrefix(readLog(t, root), logBefore)
+	if !strings.Contains(added, "1-auth-flow: override: zumen: mark-published requires publish in-progress") || !strings.Contains(added, "1-auth-flow: S-0001 published to github (o/r#1)") {
+		t.Fatalf("log gained:\n%s", added)
+	}
+}
+
+func TestTicketsMarkPublishedPromptWarns(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	approveThrough(t, root, "breakdown")
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	setGates(t, root, "prompt")
+	code, stderr := captureStderr(t, func() int {
+		return runTickets(root, []string{"mark-published", "S-0001", "--external", "github=o/r#1"})
+	})
+	if code != 0 || !strings.Contains(stderr, "warning:") {
+		t.Fatalf("mark-published under prompt = %d: %s", code, stderr)
+	}
+	if log := readLog(t, root); !strings.Contains(log, "override:") {
+		t.Fatalf("log = %s", log)
+	}
+}
+
+func TestTicketsMarkPublishedNeedsPublishedParent(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "F-0001", "feature", "Accounts")
+	newReady(t, root, "S-0002", "story", "Login", "--parent", "F-0001", "--repo", "app")
+	before := readFile(t, ticketPath(root, "S-0002"))
+	code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2")
+	if code != 1 || !strings.Contains(out, "S-0002: parent F-0001 has no github id") {
+		t.Fatalf("story before its feature = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0002")) != before {
+		t.Fatal("a refused mark-published changed the story")
+	}
+	if code, out := markPublished(t, root, "F-0001", "--external", "github=o/r#1"); code != 0 {
+		t.Fatalf("feature = %d: %s", code, out)
+	}
+	if code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2"); code != 0 {
+		t.Fatalf("story after its feature = %d: %s", code, out)
+	}
+}
+
+func TestTicketsMarkPublishedChecksToolAcrossChanges(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	if code := runChange(root, []string{"new", "Billing"}); code != 0 {
+		t.Fatal("change new Billing")
+	}
+	startPublish(t, root)
+	if code := runTickets(root, []string{"new", "story", "Invoices", "--repo", "app"}); code != 0 {
+		t.Fatal("new in Billing")
+	}
+	other := filepath.Join(state.ChangeDir(root, "2-billing"), "tickets", "S-0001.md")
+	body := strings.Replace(readFile(t, other), "- [ ] AC1: Given … When … Then …", "- [ ] AC1: Given an order, When it ships, Then an invoice is sent", 1)
+	if err := os.WriteFile(other, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready in Billing")
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "ado=AB#1"); code != 0 {
+		t.Fatalf("publish to ado = %d: %s", code, out)
+	}
+	if code := runSwitch(root, []string{"1-auth-flow"}); code != 0 {
+		t.Fatal("switch")
+	}
+	startPublish(t, root)
+	newReady(t, root, "S-0002", "story", "Login", "--repo", "app", "--depends", "S-0001")
+	code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2")
+	if code != 1 || !strings.Contains(out, "S-0002: depends_on S-0001 has no github id") {
+		t.Fatalf("github with an ado-only predecessor = %d: %s", code, out)
+	}
+	if code, out := markPublished(t, root, "S-0002", "--external", "ado=AB#2"); code != 0 {
+		t.Fatalf("ado with an ado predecessor = %d: %s", code, out)
+	}
+}
+
+func TestTicketsMarkPublishedUnfrozenPredecessorCounts(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	newReady(t, root, "S-0002", "story", "Logout", "--repo", "app", "--depends", "S-0001")
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 0 {
+		t.Fatalf("predecessor = %d: %s", code, out)
+	}
+	if code := runTickets(root, []string{"unfreeze", "S-0001", "--reason", "rework"}); code != 0 {
+		t.Fatal("unfreeze")
+	}
+	if code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2"); code != 0 {
+		t.Fatalf("after an unfrozen predecessor = %d: %s", code, out)
+	}
+}
+
+func TestTicketsMarkPublishedNeedsValidReadyMark(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	fillCriteria(t, root, "S-0001")
+	path := ticketPath(root, "S-0001")
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 1 || !strings.Contains(out, "run `zumen tickets ready S-0001` first") {
+		t.Fatalf("draft = %d: %s", code, out)
+	}
+	byHand := strings.Replace(readFile(t, path), "status: draft", "status: ready", 1)
+	if err := os.WriteFile(path, []byte(byHand), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 1 || !strings.Contains(out, "not readied through the CLI") {
+		t.Fatalf("ready by hand = %d: %s", code, out)
+	}
+	if readFile(t, path) != byHand {
+		t.Fatal("a refused mark-published changed a hand-readied ticket")
+	}
+	if code := runTickets(root, []string{"ready", "S-0001"}); code != 0 {
+		t.Fatal("ready")
+	}
+	edited := strings.Replace(readFile(t, path), "they see the dashboard", "they see their dashboard", 1)
+	if err := os.WriteFile(path, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 1 || !strings.Contains(out, "changed since readied") {
+		t.Fatalf("edited after ready = %d: %s", code, out)
+	}
+	if readFile(t, path) != edited {
+		t.Fatal("a refused mark-published changed an edited ticket")
+	}
+}
+
+func TestTicketsMarkPublishedForceDoesntSkipPredecessors(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	approveThrough(t, root, "breakdown")
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app", "--depends", "S-0099")
+	before := readFile(t, ticketPath(root, "S-0001"))
+	code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1", "--force")
+	if code != 1 || !strings.Contains(out, "S-0001: depends_on S-0099 not found") {
+		t.Fatalf("forced with a missing predecessor = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != before {
+		t.Fatal("a refused mark-published changed the ticket")
+	}
+}
+
+func TestTicketsMarkPublishedChecksSupersedes(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "S-0001", "story", "Login v1", "--repo", "app")
+	if code := runTickets(root, []string{"new", "story", "Login v2", "--repo", "app"}); code != 0 {
+		t.Fatal("new")
+	}
+	path := ticketPath(root, "S-0002")
+	if err := os.WriteFile(path, []byte(strings.Replace(readFile(t, path), "repo: app\n", "repo: app\nsupersedes: S-0001\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fillCriteria(t, root, "S-0002")
+	if code := runTickets(root, []string{"ready", "S-0002"}); code != 0 {
+		t.Fatal("ready")
+	}
+	code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2")
+	if code != 1 || !strings.Contains(out, "S-0002: supersedes S-0001 has no github id") {
+		t.Fatalf("superseding an unpublished ticket = %d: %s", code, out)
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 0 {
+		t.Fatalf("superseded = %d: %s", code, out)
+	}
+	if code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2"); code != 0 {
+		t.Fatalf("superseding = %d: %s", code, out)
+	}
+}
+
+func TestTicketsMarkPublishedListsEveryProblem(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	approveThrough(t, root, "breakdown")
+	newReady(t, root, "F-0001", "feature", "Accounts")
+	newReady(t, root, "S-0002", "story", "Login", "--parent", "F-0001", "--repo", "app")
+	code, out := markPublished(t, root, "S-0002", "--external", "github=o/r#2")
+	if code != 1 || !strings.Contains(out, "requires publish in-progress") || !strings.Contains(out, "parent F-0001 has no github id") {
+		t.Fatalf("mark-published = %d: %s", code, out)
+	}
+}
+
+func TestTicketsMarkPublishedRefusesWithAnUnreadableTicket(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	if err := os.WriteFile(ticketPath(root, "S-0009"), []byte("---\nschema: [\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := readFile(t, ticketPath(root, "S-0001"))
+	code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1")
+	if code != 1 || !strings.Contains(out, "S-0009.md") {
+		t.Fatalf("mark-published with an unreadable ticket = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != before {
+		t.Fatal("a refused mark-published changed the ticket")
+	}
+}
+
+func TestTicketsMarkPublishedRefusesClosedAndAmbiguous(t *testing.T) {
+	root := workspace(t)
+	ticketRepo(t, root)
+	startPublish(t, root)
+	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	closed := strings.Replace(readFile(t, ticketPath(root, "S-0001")), "status: ready", "status: closed", 1)
+	if err := os.WriteFile(ticketPath(root, "S-0001"), []byte(closed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := markPublished(t, root, "S-0001", "--external", "github=o/r#1"); code != 1 || !strings.Contains(out, "can't publish a closed ticket") {
+		t.Fatalf("closed = %d: %s", code, out)
+	}
+	if readFile(t, ticketPath(root, "S-0001")) != closed {
+		t.Fatal("a refused mark-published changed a closed ticket")
+	}
+
+	newReady(t, root, "F-0002", "feature", "Accounts")
+	newReady(t, root, "S-0003", "story", "Logout", "--parent", "F-0002", "--repo", "app")
+	if code, out := markPublished(t, root, "F-0002", "--external", "github=o/r#2"); code != 0 {
+		t.Fatalf("feature = %d: %s", code, out)
+	}
+	// A second F-0002 in another change makes the parent ambiguous.
+	dup := filepath.Join(state.ChangeDir(root, "2-other"), "tickets", "F-0002.md")
+	if err := os.MkdirAll(filepath.Dir(dup), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dup, []byte(strings.Replace(readFile(t, ticketPath(root, "F-0002")), "change: 1-auth-flow", "change: 2-other", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, out := markPublished(t, root, "S-0003", "--external", "github=o/r#3"); code != 1 || !strings.Contains(out, "parent F-0002 is ambiguous") {
+		t.Fatalf("ambiguous parent = %d: %s", code, out)
 	}
 }
