@@ -8,6 +8,36 @@
 
 <Three to five sentences: the shape of the solution and why it's the right one.>
 
+## Diagrams
+
+Draw these first; the prose below must agree with them. Use standard `mermaid`
+fences, about 15 nodes per diagram (split a bigger one rather than shrink it),
+and real names on nodes. Every repo in the change appears in Layers. Add a
+`### Flow: <name>` per main flow, and `### Deployment` or `### Data` when they
+help. Write generics and raw tags in backticks, or the gate reads them as
+unfilled slots.
+
+### Context
+
+<The system, its users and the external systems it talks to.>
+
+```mermaid
+```
+
+### Layers
+
+<Each repo in the change and the layers inside it. Every repo appears here.>
+
+```mermaid
+```
+
+### Flow: <name of the main flow>
+
+<The steps of this flow, across the layers above.>
+
+```mermaid
+```
+
 ## Context
 
 <Current codebase state relevant to this change; cite `file:line` where useful.>
