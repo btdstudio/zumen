@@ -58,8 +58,18 @@ A change is an initiative, often across many repos, and ends in tickets:
 
 Each phase stops at a gate for your approval. With the default `gates: block`
 setting, `zumen gate` refuses a phase until the earlier ones are approved or
-skipped. `--force` overrides this and records it in `LOG.md`; `prompt` and `auto`
-warn instead. In a git workspace (the default), state changes commit `STATE.json`
+skipped. It also checks the phase's artifact when you approve spec, architecture
+or breakdown, or complete publish:
+
+- the spec has at least one `R` requirement;
+- `architecture.md` has a `## Diagrams` section with Context, Layers and a Flow,
+  each a non-empty `mermaid` block, and no unfilled template slots;
+- the change's tickets exist and pass validation;
+- every ready or published ticket is frozen.
+
+Each problem names its file, and the line where there is one. `--force` overrides
+a refusal and records each overridden problem in `LOG.md`; `prompt` and `auto` warn
+instead. In a git workspace (the default), state changes commit `STATE.json`
 and `LOG.md` for you, without pushing, and gates also commit the change's folders
 under `specs/`, `01_research/` and `02_explore/`. A local workspace skips the commits;
 see [Version control](#version-control).

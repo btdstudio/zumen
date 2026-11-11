@@ -714,3 +714,16 @@ func TestMigrationPersistsOnNextWrite(t *testing.T) {
 		t.Fatalf("old phase remains:\n%s", raw)
 	}
 }
+
+func TestMachineCheckIsWired(t *testing.T) {
+	if Machine.Check == nil || store.Machine.Check == nil {
+		t.Fatal("Machine.Check isn't set, or the store's copy lost it")
+	}
+	root := t.TempDir()
+	if ps := store.Machine.CheckArtifacts(root, "1-x", "architecture", "approved"); len(ps) != 1 || ps[0].Message != "doesn't exist" {
+		t.Fatalf("store's CheckArtifacts = %v", ps)
+	}
+	if ps := Machine.CheckArtifacts(root, "1-x", "architecture", "await-approval"); ps != nil {
+		t.Fatalf("await-approval = %v", ps)
+	}
+}

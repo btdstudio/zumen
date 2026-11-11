@@ -301,8 +301,15 @@ func TestTicketsMarkPublishedCommitsOnce(t *testing.T) {
 		t.Fatalf("change new = %d", code)
 	}
 	ticketRepo(t, root)
+	// The draft exists before breakdown, so breakdown has a ticket to approve.
+	if code := runTickets(root, []string{"new", "story", "Login", "--repo", "app"}); code != 0 {
+		t.Fatal("new Login")
+	}
+	fillCriteria(t, root, "S-0001")
 	approveThrough(t, root, "breakdown")
-	newReady(t, root, "S-0001", "story", "Login", "--repo", "app")
+	if code, out := captureStdout(t, func() int { return runTickets(root, []string{"ready", "S-0001"}) }); code != 0 {
+		t.Fatalf("ready = %d: %s", code, out)
+	}
 	before := strings.Count(git(t, root, "log", "--format=%s"), "\n")
 	if code := runTickets(root, []string{"mark-published", "S-0001", "--external", "github=o/r#1", "--force"}); code != 0 {
 		t.Fatal("mark-published --force")
