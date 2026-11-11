@@ -1219,3 +1219,23 @@ func TestTicketsCheckNoWarningWhenApprovedOrNotReady(t *testing.T) {
 		t.Fatalf("check after re-approval = %d:\n%s", code, out)
 	}
 }
+
+// T-0031 AC1, AC2: a title cut just after a "-" gives a valid name, and the
+// next ADR gets the next number.
+func TestAdrNewLongTitleTwice(t *testing.T) {
+	root := workspace(t)
+	title := strings.Repeat("a", 39) + " then more words"
+	for i := 0; i < 2; i++ {
+		if code, _ := captureStdout(t, func() int { return runAdr(root, []string{"new", "--title", title}) }); code != 0 {
+			t.Fatalf("adr new %d = %d", i+1, code)
+		}
+	}
+	names, err := filepath.Glob(filepath.Join(root, "04_architecture", "adr", "*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"0001-" + strings.Repeat("a", 39) + ".md", "0002-" + strings.Repeat("a", 39) + ".md"}
+	if len(names) != 2 || filepath.Base(names[0]) != want[0] || filepath.Base(names[1]) != want[1] {
+		t.Fatalf("names = %v, want %v", names, want)
+	}
+}
