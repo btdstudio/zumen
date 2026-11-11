@@ -166,6 +166,8 @@ func ticketsNew(root string, args []string) (int, error) {
 	if err := os.WriteFile(path, t.Bytes(), 0o644); err != nil {
 		return 0, err
 	}
+	// Regenerated, but not recorded: the next recorded transition commits it.
+	refreshOverviews(root, st.Name)
 	fmt.Printf("created %s %s\n", f.ID, path)
 	return 0, nil
 }
@@ -404,7 +406,19 @@ func saveTicket(root string, t *ticket.Ticket, lines ...string) error {
 	for i, line := range lines {
 		logged[i] = t.Change + ": " + line
 	}
-	return state.Record(root, logged, filepath.ToSlash(rel))
+	paths := append([]string{filepath.ToSlash(rel)}, refreshOverviews(root, plan.TicketChange(t))...)
+	return state.Record(root, logged, paths...)
+}
+
+// refreshOverviews regenerates the changes' READMEs under `overview: auto`
+// and returns the paths it wrote, for the caller's Record. A failure is a
+// warning: the command still succeeds and that README is left alone.
+func refreshOverviews(root string, changes ...string) []string {
+	written, err := state.RefreshOverview(root, changes...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %v\n", err)
+	}
+	return written
 }
 
 const readyUsage = "usage: zumen tickets ready <id>... | --all [--force]"
@@ -543,6 +557,11 @@ func ticketsReady(root string, args []string) (int, error) {
 		paths = append(paths, filepath.ToSlash(rel))
 		lines = append(lines, fmt.Sprintf("%s: %s readied", c.Change, c.ID))
 	}
+	var changes []string
+	for _, c := range copies {
+		changes = append(changes, plan.TicketChange(c))
+	}
+	paths = append(paths, refreshOverviews(root, changes...)...)
 	if err := state.Record(root, lines, paths...); err != nil {
 		return 0, err
 	}
