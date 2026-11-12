@@ -29,6 +29,10 @@ type agentsDoc struct {
 	preamble     []string
 	sections     []agentsSection
 	finalNewline bool
+	// unclosedFence is true when the text ends inside a code fence. Every `##`
+	// line after the fence's start was then read as code, so the sections can't
+	// be trusted.
+	unclosedFence bool
 }
 
 // fenceOf reports the fence character and length when line opens or closes a
@@ -92,6 +96,7 @@ func parseAgents(text string) agentsDoc {
 		}
 	}
 	flush()
+	doc.unclosedFence = fenceCh != 0
 	return doc
 }
 
@@ -115,13 +120,19 @@ func (d agentsDoc) String() string {
 // section. The `#` title, the text under it, the user-owned sections and any
 // section of the user's own are kept byte for byte, in the user's order. When
 // it can't merge, merged is "" and reason says why: the file has no `##`
-// heading, or repeats a zumen heading. The merge is idempotent.
+// heading, repeats a zumen heading, or ends inside a code fence. The merge is
+// idempotent.
 func MergeAgents(user, scaffold string) (merged, reason string) {
 	return mergeAgents(user, scaffold, userOwnedSections, retiredSections)
 }
 
 func mergeAgents(user, scaffold string, userOwned, retired []string) (merged, reason string) {
 	u, s := parseAgents(user), parseAgents(scaffold)
+	// An unclosed fence swallows every later section into the one it starts in,
+	// and replacing that section would delete them. Refuse instead.
+	if u.unclosedFence {
+		return "", "unclosed code fence"
+	}
 	if len(u.sections) == 0 {
 		return "", "no ## headings"
 	}

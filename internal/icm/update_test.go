@@ -412,6 +412,7 @@ func TestUpdateRefusesUnmergeableAgents(t *testing.T) {
 	for _, tc := range []struct{ name, content, reason string }{
 		{"no ## headings", "mine", "no ## headings"},
 		{"a duplicated zumen heading", real + "\n## Handoff\n\nagain\n", `duplicated heading "Handoff"`},
+		{"an unclosed fence in a zumen section", strings.Replace(editAgents(t, real), "## Tech stack & standards", "Example:\n```sh\nzumen status\n\n## Tech stack & standards", 1), "unclosed code fence"},
 	} {
 		dir := scaffoldWorkspace(t)
 		path := filepath.Join(dir, "AGENTS.md")

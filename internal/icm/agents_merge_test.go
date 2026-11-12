@@ -102,6 +102,10 @@ func TestMergeAgentsRefuses(t *testing.T) {
 		{"empty", "", "no ## headings"},
 		{"headings only in a fence", "# P\n\n```\n## A\n```\n", "no ## headings"},
 		{"a duplicated zumen heading", "# P\n\n## A\n\none\n\n## B\n\nb\n\n## A\n\ntwo\n", `duplicated heading "A"`},
+		{"an unclosed fence in a zumen section, with the user's sections after it",
+			"# P\n\n## A\n\nold a\n\nExample:\n```sh\nzumen status\n\n## Tech stack & standards\n\nmine\n\n## Team notes\n\nkeep\n", "unclosed code fence"},
+		{"an unclosed fence in a user section", "# P\n\n## A\n\nold a\n\n## Team notes\n\n~~~\nnotes\n", "unclosed code fence"},
+		{"an unclosed fence before any heading", "# P\n\n````\n## A\n```\n", "unclosed code fence"},
 	} {
 		got, reason := MergeAgents(tc.user, scaf)
 		if got != "" || reason != tc.reason {
@@ -198,6 +202,9 @@ func TestScaffoldAgentsHeadingsAreUnique(t *testing.T) {
 	}
 	if len(seen) == 0 {
 		t.Fatal("no ## headings in the scaffold's AGENTS.md")
+	}
+	if parseAgents(scaffoldAgents(t)).unclosedFence {
+		t.Error("the scaffold's AGENTS.md ends inside a code fence")
 	}
 	for _, name := range userOwnedSections {
 		if !seen[name] {
