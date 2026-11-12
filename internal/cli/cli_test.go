@@ -137,6 +137,30 @@ func TestChangeNewLeavesNothingBehindOnCorruptState(t *testing.T) {
 	}
 }
 
+// AC2: a closed change whose folder was removed still keeps its id.
+func TestChangeNewSkipsRecordedChangeIds(t *testing.T) {
+	root := workspace(t) // 1-auth-flow
+	if code := runChange(root, []string{"close", "1-auth-flow", "--reason", "done"}); code != 0 {
+		t.Fatalf("close = %d", code)
+	}
+	if err := os.RemoveAll(state.ChangeDir(root, "1-auth-flow")); err != nil {
+		t.Fatal(err)
+	}
+	if code := runChange(root, []string{"new", "Auth flow"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	changes, err := state.ReadChanges(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := changes["2-auth-flow"]; !ok {
+		t.Fatalf("changes = %v, want 2-auth-flow", changes)
+	}
+	if changes["1-auth-flow"].Status != "closed" {
+		t.Fatalf("1-auth-flow = %q, want it still closed", changes["1-auth-flow"].Status)
+	}
+}
+
 func TestSourceAndAdrNewRejectStrayArguments(t *testing.T) {
 	root := workspace(t)
 	for _, run := range []struct {

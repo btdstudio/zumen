@@ -107,8 +107,9 @@ func ArtifactPath(root, change, name string) string {
 	return filepath.Join(ChangeDir(root, change), name)
 }
 
-// NextChangeId is the next sequential change id.
-func NextChangeId(root string) int { return store.NextID(root) }
+// NextChangeId is the next sequential change id: past every change folder and
+// every change STATE.json records, so a closed change's id is never reused.
+func NextChangeId(root string) (int, error) { return store.NextID(root) }
 
 // Slugify lowercases to a short kebab-case slug.
 func Slugify(text string) string { return kiso.Slugify(text) }

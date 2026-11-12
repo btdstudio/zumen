@@ -164,18 +164,66 @@ func TestArtifactPaths(t *testing.T) {
 
 func TestNextChangeId(t *testing.T) {
 	root := t.TempDir()
-	if NextChangeId(root) != 1 {
-		t.Fatalf("no specs dir -> 1, got %d", NextChangeId(root))
+	next := func() int {
+		t.Helper()
+		id, err := NextChangeId(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	if got := next(); got != 1 {
+		t.Fatalf("no specs dir -> 1, got %d", got)
 	}
 	os.MkdirAll(SpecsDir(root), 0o755)
-	if NextChangeId(root) != 1 {
-		t.Fatalf("empty specs -> 1")
+	if got := next(); got != 1 {
+		t.Fatalf("empty specs -> 1, got %d", got)
 	}
 	os.MkdirAll(filepath.Join(SpecsDir(root), "1-auth-flow"), 0o755)
 	os.MkdirAll(filepath.Join(SpecsDir(root), "2-refactor"), 0o755)
 	os.WriteFile(filepath.Join(SpecsDir(root), "README.md"), []byte("x"), 0o644)
-	if NextChangeId(root) != 3 {
-		t.Fatalf("got %d, want 3", NextChangeId(root))
+	if got := next(); got != 3 {
+		t.Fatalf("got %d, want 3", got)
+	}
+}
+
+// A change STATE.json records keeps its id even when its folder is gone.
+func TestNextChangeIdCountsRecordsWithoutFolders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	if _, err := SeedChange(root, "1-alpha", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SeedChange(root, "2-beta", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CloseChange(root, "2-beta", "done"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(ChangeDir(root, "2-beta")); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := NextChangeId(root); err != nil || id != 3 {
+		t.Fatalf("NextChangeId = %d, %v; want 3", id, err)
+	}
+}
+
+// Seeding a name STATE.json already records is refused, and changes nothing.
+func TestSeedChangeRefusesRecordedName(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	if _, err := SeedChange(root, "1-alpha", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, _ := os.ReadFile(StatePath(root))
+	logBefore, _ := os.ReadFile(LogPath(root))
+	if _, err := SeedChange(root, "1-alpha", false, nil); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("second seed err = %v, want already exists", err)
+	}
+	stateAfter, _ := os.ReadFile(StatePath(root))
+	logAfter, _ := os.ReadFile(LogPath(root))
+	if string(stateAfter) != string(stateBefore) || string(logAfter) != string(logBefore) {
+		t.Fatal("a refused seed changed STATE.json or LOG.md")
 	}
 }
 

@@ -246,7 +246,11 @@ func runChange(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	id := state.NextChangeId(root)
+	id, err := state.NextChangeId(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	slug := state.Slugify(title)
 	if slug == "" {
 		slug = "change"
