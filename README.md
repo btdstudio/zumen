@@ -25,24 +25,37 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 
 | Command | Purpose |
 |---|---|
-| `zumen init [dir] [--no-git]` | scaffold the planning ICM structure; `--no-git` makes a local workspace (`vcs: none`) |
+| `zumen init [dir] [--no-git] [--force]` | scaffold the planning ICM structure; `--no-git` makes a local workspace (`vcs: none`), `--force` overwrites existing files |
 | `zumen update` | refresh managed files to the installed version |
 | `zumen status` | show the active change's phase/status |
 | `zumen settings` | show/merge settings |
 | `zumen switch [--all] [<change>]` | list changes, or switch the active change |
-| `zumen source new\|list\|show` | manage `00_intake/` |
-| `zumen adr new\|list\|show` | manage `04_architecture/adr/` |
-| `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
+| `zumen source new --title <t> [--repo <path>] [--rev <r>] [--body <b>]` | add an intake source to `00_intake/` |
+| `zumen source list` | list intake sources |
+| `zumen source show <id>` | show an intake source |
+| `zumen adr new --title <t> [--deciders <d>] [--context <c>] [--decision <d>] [--consequences <c>] [--file <path>]` | create an ADR in `04_architecture/adr/` |
+| `zumen adr list` | list ADRs |
+| `zumen adr show <number>` | show an ADR |
+| `zumen change new <title> [--repo <name\|path>]... [--rev <r>] [--body <b>]` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen tickets new\|check\|status\|order\|ready\|mark-published\|unfreeze` | manage tickets |
+| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>]` | create a ticket in the active change |
+| `zumen tickets check` | validate every ticket |
+| `zumen tickets status` | list tickets by draft, ready, published and drifted |
+| `zumen tickets order` | list tickets in publish order |
+| `zumen tickets ready <id>... \| --all [--force]` | ready draft tickets once breakdown is approved |
+| `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket |
+| `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check the change's README overview |
-| `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
+| `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
+| `zumen repo list` | list repos and their local paths |
+| `zumen repo path <name> <path>` | set a repo's local path |
+| `zumen repo doctor [--clone] [--into <dir>]` | check repos; `--clone` fetches missing ones |
 | `zumen env` | print harness flags for the active change's repos |
 | `zumen check` | validate the embedded scaffold |
 | `zumen version` | print the version |
-| `zumen help` | usage |
+| `zumen help [<command> [<verb>]]` | usage; `zumen <command> --help` (or `-h`) prints one command's usage |
 
 ## The loop
 
