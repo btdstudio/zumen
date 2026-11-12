@@ -2,9 +2,11 @@ package cli
 
 import (
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -322,6 +324,38 @@ func TestChangeNewWritesNothingWhenIdAllocationFails(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(state.StatePath(root)); string(after) != string(stateBefore) {
 		t.Fatal("STATE.json changed")
+	}
+}
+
+// AC2 through the CLI: an intake id that would overflow stops both commands
+// before they write anything.
+func TestIntakeOverflowIsRefused(t *testing.T) {
+	root := workspace(t) // 1-auth-flow cites 00_intake/1.md
+	if _, err := state.SeedChange(root, "2-huge", false, []string{"00_intake/" + strconv.Itoa(math.MaxInt) + ".md"}); err != nil {
+		t.Fatal(err)
+	}
+	stateBefore, _ := os.ReadFile(state.StatePath(root))
+	logBefore, _ := os.ReadFile(state.LogPath(root))
+	for name, fn := range map[string]func() int{
+		"source new": func() int { return runSource(root, []string{"new", "--title", "Next"}) },
+		"change new": func() int { return runChange(root, []string{"new", "Next"}) },
+	} {
+		code, stderr := captureStderr(t, fn)
+		if code != 1 || !strings.Contains(stderr, "intake id out of range") {
+			t.Fatalf("%s = %d, %q; want 1 and an out-of-range error", name, code, stderr)
+		}
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md"}) {
+		t.Fatalf("intake files = %v, want only 1.md", got)
+	}
+	if got, _ := os.ReadFile(state.StatePath(root)); string(got) != string(stateBefore) {
+		t.Fatal("STATE.json changed")
+	}
+	if got, _ := os.ReadFile(state.LogPath(root)); string(got) != string(logBefore) {
+		t.Fatal("LOG.md changed")
+	}
+	if _, err := os.Stat(state.ChangeDir(root, "3-next")); err == nil {
+		t.Fatal("change new made a change folder")
 	}
 }
 

@@ -1,8 +1,10 @@
 package source
 
 import (
+	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -159,5 +161,118 @@ func TestWriteNewSourceRespectsAfter(t *testing.T) {
 		if created.ID != tc.want {
 			t.Fatalf("After %d: id = %d, want %d", tc.after, created.ID, tc.want)
 		}
+	}
+}
+
+// AC1: the write is the existence check, so nothing already at the path is ever
+// opened for writing. A stat-then-write would write through a dangling symlink.
+func TestWriteSourceNeverOverwrites(t *testing.T) {
+	root := t.TempDir()
+	dir := SourceDir(root, "")
+	os.MkdirAll(dir, 0o755)
+	existing := filepath.Join(dir, "1.md")
+	os.WriteFile(existing, []byte("sentinel"), 0o644)
+	_, err := WriteSource(root, "", Source{ID: 1, Source: SOURCE_ISSUE, Title: "x"})
+	if err == nil || !strings.Contains(err.Error(), "source 1 already exists") || !strings.Contains(err.Error(), "not overwriting") {
+		t.Fatalf("existing file: err = %v", err)
+	}
+	if b, _ := os.ReadFile(existing); string(b) != "sentinel" {
+		t.Fatalf("1.md = %q, want it untouched", b)
+	}
+
+	target := filepath.Join(t.TempDir(), "elsewhere.md")
+	if err := os.Symlink(target, filepath.Join(dir, "2.md")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	_, err = WriteSource(root, "", Source{ID: 2, Source: SOURCE_ISSUE, Title: "x"})
+	if err == nil || !strings.Contains(err.Error(), "not overwriting") {
+		t.Fatalf("dangling symlink: err = %v, want not overwriting", err)
+	}
+	if _, err := os.Stat(target); err == nil {
+		t.Fatal("wrote through the symlink and created its target")
+	}
+}
+
+func TestWriteSourceRejectsNonPositiveIds(t *testing.T) {
+	for _, id := range []int{0, -1, math.MinInt} {
+		root := t.TempDir()
+		_, err := WriteSource(root, "", Source{ID: id, Source: SOURCE_ISSUE, Title: "x"})
+		if err == nil || !strings.Contains(err.Error(), "out of range") {
+			t.Fatalf("id %d: err = %v, want out of range", id, err)
+		}
+		if _, err := os.Stat(SourceDir(root, "")); err == nil {
+			entries, _ := os.ReadDir(SourceDir(root, ""))
+			if len(entries) != 0 {
+				t.Fatalf("id %d: wrote %v", id, entries)
+			}
+		}
+	}
+}
+
+// AC2: an id that would overflow is refused before anything is written, whether
+// it comes from an intake file or from After.
+func TestWriteNewSourceRefusesOverflow(t *testing.T) {
+	largest := strconv.Itoa(math.MaxInt)
+	for name, tc := range map[string]struct {
+		file  string
+		after int
+	}{
+		"file":  {file: largest + ".md"},
+		"after": {after: math.MaxInt},
+	} {
+		root := t.TempDir()
+		dir := SourceDir(root, "")
+		os.MkdirAll(dir, 0o755)
+		if tc.file != "" {
+			os.WriteFile(filepath.Join(dir, tc.file), []byte("x"), 0o644)
+		}
+		before, _ := os.ReadDir(dir)
+		_, err := WriteNewSource(root, "", NewSourceOptions{Title: "t", After: tc.after})
+		if err == nil || !strings.Contains(err.Error(), "intake id out of range") {
+			t.Fatalf("%s: err = %v, want intake id out of range", name, err)
+		}
+		if after, _ := os.ReadDir(dir); len(after) != len(before) {
+			t.Fatalf("%s: wrote a file: %v", name, after)
+		}
+	}
+	// One below the largest still works.
+	root := t.TempDir()
+	created, err := WriteNewSource(root, "", NewSourceOptions{Title: "t", After: math.MaxInt - 2})
+	if err != nil || created.ID != math.MaxInt-1 {
+		t.Fatalf("After MaxInt-2: id = %d, err = %v; want MaxInt-1", created.ID, err)
+	}
+	// The largest id itself is still allowed; only the one after it is refused.
+	root = t.TempDir()
+	created, err = WriteNewSource(root, "", NewSourceOptions{Title: "t", After: math.MaxInt - 1})
+	if err != nil || created.ID != math.MaxInt {
+		t.Fatalf("After MaxInt-1: id = %d, err = %v; want MaxInt", created.ID, err)
+	}
+}
+
+// An open that fails for a reason other than "exists" is reported as is, and
+// leaves nothing behind; so does a store folder that can't be created.
+func TestWriteSourceReportsOtherErrors(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	root := t.TempDir()
+	dir := SourceDir(root, "")
+	os.MkdirAll(dir, 0o755)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	_, err := WriteSource(root, "", Source{ID: 1, Source: SOURCE_ISSUE, Title: "x"})
+	if err == nil || strings.Contains(err.Error(), "not overwriting") {
+		t.Fatalf("read-only store: err = %v, want a permission error, not 'not overwriting'", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("wrote %v", entries)
+	}
+
+	blocked := t.TempDir()
+	os.WriteFile(filepath.Join(blocked, DEFAULT_SOURCE_DIR), []byte("x"), 0o644) // a file where the store folder goes
+	if _, err := WriteSource(blocked, "", Source{ID: 1, Source: SOURCE_ISSUE, Title: "x"}); err == nil {
+		t.Fatal("WriteSource succeeded with a file in place of the store folder")
 	}
 }
