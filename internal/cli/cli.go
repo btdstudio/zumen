@@ -271,6 +271,22 @@ func runChange(root string, args []string) int {
 	return 0
 }
 
+// intakeFloor is the highest intake id any change records in its sources,
+// closed changes included, so a new intake never takes the id (and path) of one
+// that was deleted while a change still cites it. An unreadable STATE.json is
+// an error, never "no records".
+func intakeFloor(root, sourceDir string) (int, error) {
+	changes, err := state.ReadChanges(root)
+	if err != nil {
+		return 0, err
+	}
+	var recorded []string
+	for _, c := range changes {
+		recorded = append(recorded, c.Sources...)
+	}
+	return source.MaxRecordedId(sourceDir, recorded), nil
+}
+
 // changeRepos returns which --repo values are registered names. A single
 // unregistered value is still accepted as a path to the codebase; several repos
 // have to be registered, because a change can only track logical names.
@@ -471,11 +487,16 @@ func runSource(root string, args []string) int {
 			fmt.Fprintln(os.Stderr, usageLine("source", "new"))
 			return 1
 		}
+		floor, err := intakeFloor(root, dir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		src := source.SOURCE_ISSUE
 		if repo != "" {
 			src = source.SOURCE_REPO
 		}
-		s, err := source.WriteNewSource(root, dir, source.NewSourceOptions{Title: title, Source: src, Repo: repo, Rev: rev, Body: body})
+		s, err := source.WriteNewSource(root, dir, source.NewSourceOptions{Title: title, Source: src, Repo: repo, Rev: rev, Body: body, After: floor})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1

@@ -161,6 +161,91 @@ func TestChangeNewSkipsRecordedChangeIds(t *testing.T) {
 	}
 }
 
+// intakeIDs lists the ids of the intake files under root.
+func intakeIDs(t *testing.T, root string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(root, "00_intake"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, e := range entries {
+		ids = append(ids, e.Name())
+	}
+	return ids
+}
+
+// AC6: source new skips an intake id a change records, even with the file gone.
+func TestSourceNewSkipsRecordedIntakeIds(t *testing.T) {
+	root := workspace(t) // 1-auth-flow cites 00_intake/1.md
+	if _, err := state.SeedChange(root, "2-gone", false, []string{"00_intake/5.md", "issue:40"}); err != nil {
+		t.Fatal(err)
+	}
+	if code := runSource(root, []string{"new", "--title", "Next"}); code != 0 {
+		t.Fatalf("source new = %d", code)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md", "6.md"}) {
+		t.Fatalf("intake files = %v, want 1.md and 6.md", got)
+	}
+}
+
+// Closed changes' sources count too: closing a change doesn't free its intake id.
+func TestIntakeFloorCountsClosedChanges(t *testing.T) {
+	root := workspace(t) // 1-auth-flow cites 00_intake/1.md
+	if code := runChange(root, []string{"new", "Second"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	if code := runChange(root, []string{"close", "2-second", "--reason", "done"}); code != 0 {
+		t.Fatalf("close = %d", code)
+	}
+	if err := os.Remove(filepath.Join(root, "00_intake", "2.md")); err != nil {
+		t.Fatal(err)
+	}
+	if code := runSource(root, []string{"new", "--title", "Next"}); code != 0 {
+		t.Fatalf("source new = %d", code)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md", "3.md"}) {
+		t.Fatalf("intake files = %v, want 1.md and 3.md", got)
+	}
+}
+
+// AC7: when files and records agree, or there's no STATE.json, ids are as before.
+func TestIntakeIdsUnchangedWhenConsistent(t *testing.T) {
+	root := workspace(t)
+	if code := runSource(root, []string{"new", "--title", "Next"}); code != 0 {
+		t.Fatalf("source new = %d", code)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md", "2.md"}) {
+		t.Fatalf("consistent: intake files = %v, want 1.md and 2.md", got)
+	}
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	bare := t.TempDir()
+	for _, title := range []string{"One", "Two"} {
+		if code := runSource(bare, []string{"new", "--title", title}); code != 0 {
+			t.Fatalf("source new %s = %d", title, code)
+		}
+	}
+	if got := intakeIDs(t, bare); !slices.Equal(got, []string{"1.md", "2.md"}) {
+		t.Fatalf("no STATE.json: intake files = %v, want 1.md and 2.md", got)
+	}
+}
+
+// AC8: an unparseable STATE.json stops source new before it writes anything.
+func TestSourceNewRefusesCorruptState(t *testing.T) {
+	root := workspace(t)
+	if err := os.WriteFile(state.StatePath(root), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, stderr := captureStderr(t, func() int { return runSource(root, []string{"new", "--title", "Next"}) })
+	if code != 1 || !strings.Contains(stderr, "cannot parse") {
+		t.Fatalf("source new = %d, %q; want 1 and the parse error", code, stderr)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md"}) {
+		t.Fatalf("intake files = %v, want only 1.md", got)
+	}
+}
+
 func TestSourceAndAdrNewRejectStrayArguments(t *testing.T) {
 	root := workspace(t)
 	for _, run := range []struct {
