@@ -276,3 +276,27 @@ func TestWriteSourceReportsOtherErrors(t *testing.T) {
 		t.Fatal("WriteSource succeeded with a file in place of the store folder")
 	}
 }
+
+// R10, AC9: the idea key is written only when set, and read back, so an intake
+// made without an idea is exactly what v0.8.0 wrote.
+func TestIdeaKeyIsWrittenOnlyWhenSet(t *testing.T) {
+	plain := ToFrontmatter(Source{ID: 1, Title: "T", Source: SOURCE_ISSUE, Body: "b"})
+	if strings.Contains(plain, "idea") || plain != "---\nid: 1\ntitle: T\nsource: issue\n---\n\nb" {
+		t.Fatalf("a source with no idea = %q", plain)
+	}
+	withIdea := ToFrontmatter(Source{ID: 1, Title: "T", Source: SOURCE_REPO, Repo: "r", Rev: "v1", Idea: 3, Body: "b"})
+	if want := "---\nid: 1\ntitle: T\nsource: repo\nrepo: r\nrev: v1\nidea: 3\n---\n\nb"; withIdea != want {
+		t.Fatalf("a source from idea 3 = %q, want %q", withIdea, want)
+	}
+	if got := ParseSource(withIdea, 1); got.Idea != 3 || got.Repo != "r" || got.Rev != "v1" || got.Body != "b" {
+		t.Fatalf("parsed = %+v", got)
+	}
+	if got := ParseSource(plain, 1); got.Idea != 0 {
+		t.Fatalf("a source with no idea parsed as idea %d", got.Idea)
+	}
+	root := t.TempDir()
+	created, err := WriteNewSource(root, "", NewSourceOptions{Title: "T", Idea: 5})
+	if err != nil || created.Idea != 5 {
+		t.Fatalf("WriteNewSource = %+v, %v; want idea 5", created, err)
+	}
+}

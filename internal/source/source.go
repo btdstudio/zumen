@@ -31,6 +31,7 @@ type Source struct {
 	Source string `json:"source"` // issue | repo
 	Repo   string `json:"repo"`   // path/url when source == repo
 	Rev    string `json:"rev"`    // optional pin
+	Idea   int    `json:"idea"`   // the idea this was promoted from, 0 for none
 	Body   string `json:"body"`
 	Path   string `json:"path"`
 }
@@ -92,12 +93,14 @@ func ParseSource(raw string, fallbackID int) Source {
 	if fm["source"] == SOURCE_REPO {
 		src = SOURCE_REPO
 	}
+	idea, _ := strconv.Atoi(fm["idea"])
 	return Source{
 		ID:     id,
 		Title:  fm["title"],
 		Source: src,
 		Repo:   fm["repo"],
 		Rev:    fm["rev"],
+		Idea:   idea,
 		Body:   body,
 	}
 }
@@ -113,6 +116,9 @@ func ToFrontmatter(s Source) string {
 	}
 	if s.Rev != "" {
 		out += fmt.Sprintf("\nrev: %s", s.Rev)
+	}
+	if s.Idea > 0 {
+		out += fmt.Sprintf("\nidea: %d", s.Idea)
 	}
 	out += fmt.Sprintf("\n---\n\n%s", s.Body)
 	return out
@@ -243,6 +249,7 @@ type NewSourceOptions struct {
 	Repo   string
 	Rev    string
 	Body   string
+	Idea   int // the idea this intake is promoted from, 0 for none
 	// After is an id the new source must be above: the highest intake id a
 	// change still records, so a deleted intake's id is never reused. Callers
 	// that create intakes pass it (the CLI's intakeFloor); 0 means files only.
@@ -267,6 +274,7 @@ func WriteNewSource(root, sourceDir string, opts NewSourceOptions) (Source, erro
 		Source: src,
 		Repo:   opts.Repo,
 		Rev:    opts.Rev,
+		Idea:   opts.Idea,
 		Body:   opts.Body,
 	})
 }
