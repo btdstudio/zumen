@@ -120,3 +120,44 @@ func TestParseSourceRepoAndIssue(t *testing.T) {
 		t.Fatalf("issue parse = %+v", issue)
 	}
 }
+
+func TestMaxRecordedId(t *testing.T) {
+	recorded := []string{
+		"00_intake/3.md",
+		"./00_intake/5.md",
+		"00_intake//4.md",
+		"other/9.md",
+		"issue:12",
+		"https://example.com/11.md",
+		"00_intake/7.txt",
+		"00_intake/x.md",
+		"00_intake/sub/8.md",
+	}
+	if got := MaxRecordedId("00_intake", recorded); got != 5 {
+		t.Fatalf("MaxRecordedId = %d, want 5", got)
+	}
+	if got := MaxRecordedId("", []string{"00_intake/6.md"}); got != 6 {
+		t.Fatalf("default sourceDir = %d, want 6", got)
+	}
+	if got := MaxRecordedId("tickets", recorded); got != 0 {
+		t.Fatalf("no match = %d, want 0", got)
+	}
+	if got := MaxRecordedId("00_intake", nil); got != 0 {
+		t.Fatalf("none = %d, want 0", got)
+	}
+}
+
+func TestWriteNewSourceRespectsAfter(t *testing.T) {
+	for _, tc := range []struct{ after, want int }{{5, 6}, {1, 3}, {2, 3}, {0, 3}} {
+		root := t.TempDir()
+		WriteNewSource(root, "", NewSourceOptions{Title: "a"})
+		WriteNewSource(root, "", NewSourceOptions{Title: "b"})
+		created, err := WriteNewSource(root, "", NewSourceOptions{Title: "c", After: tc.after})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if created.ID != tc.want {
+			t.Fatalf("After %d: id = %d, want %d", tc.after, created.ID, tc.want)
+		}
+	}
+}

@@ -225,7 +225,8 @@ func runChange(root string, args []string) int {
 	if len(repoArgs) > 0 {
 		repo = repoArgs[0]
 	}
-	// Fail on unreadable state before writing the intake and spec folder.
+	// Check and allocate everything before the first write, so a failure here
+	// leaves no intake or spec folder behind.
 	if _, err := state.LoadState(root); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -235,26 +236,39 @@ func runChange(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	src := source.SOURCE_ISSUE
-	if repo != "" {
-		src = source.SOURCE_REPO
-	}
-	created, err := source.WriteNewSource(root, loaded.Effective.SourceDir, source.NewSourceOptions{
-		Title: title, Source: src, Repo: repo, Rev: rev, Body: body,
-	})
+	sourceDir := loaded.Effective.SourceDir
+	floor, err := intakeFloor(root, sourceDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	id := state.NextChangeId(root)
+	id, err := state.NextChangeId(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	slug := state.Slugify(title)
 	if slug == "" {
 		slug = "change"
 	}
 	name := fmt.Sprintf("%d-%s", id, slug)
-	rel := filepath.ToSlash(filepath.Join(loaded.Effective.SourceDir, fmt.Sprintf("%d.md", created.ID)))
+	src := source.SOURCE_ISSUE
+	if repo != "" {
+		src = source.SOURCE_REPO
+	}
+	created, err := source.WriteNewSource(root, sourceDir, source.NewSourceOptions{
+		Title: title, Source: src, Repo: repo, Rev: rev, Body: body, After: floor,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	rel := filepath.ToSlash(filepath.Join(sourceDir, fmt.Sprintf("%d.md", created.ID)))
 	st, err := state.SeedChange(root, name, repo != "", []string{rel}, registered...)
 	if err != nil {
+		// Only a race or an I/O fault gets here; don't leave an intake that no
+		// change records.
+		os.Remove(source.SourcePath(source.SourceDir(root, sourceDir), created.ID))
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -265,6 +279,22 @@ func runChange(root string, args []string) int {
 		}
 	}
 	return 0
+}
+
+// intakeFloor is the highest intake id any change records in its sources,
+// closed changes included, so a new intake never takes the id (and path) of one
+// that was deleted while a change still cites it. An unreadable STATE.json is
+// an error, never "no records".
+func intakeFloor(root, sourceDir string) (int, error) {
+	changes, err := state.ReadChanges(root)
+	if err != nil {
+		return 0, err
+	}
+	var recorded []string
+	for _, c := range changes {
+		recorded = append(recorded, c.Sources...)
+	}
+	return source.MaxRecordedId(sourceDir, recorded), nil
 }
 
 // changeRepos returns which --repo values are registered names. A single
@@ -467,11 +497,16 @@ func runSource(root string, args []string) int {
 			fmt.Fprintln(os.Stderr, usageLine("source", "new"))
 			return 1
 		}
+		floor, err := intakeFloor(root, dir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		src := source.SOURCE_ISSUE
 		if repo != "" {
 			src = source.SOURCE_REPO
 		}
-		s, err := source.WriteNewSource(root, dir, source.NewSourceOptions{Title: title, Source: src, Repo: repo, Rev: rev, Body: body})
+		s, err := source.WriteNewSource(root, dir, source.NewSourceOptions{Title: title, Source: src, Repo: repo, Rev: rev, Body: body, After: floor})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1

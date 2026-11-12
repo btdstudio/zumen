@@ -8,6 +8,7 @@ package source
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -134,6 +135,26 @@ func NextId(root, sourceDir string) int {
 	return max + 1
 }
 
+// MaxRecordedId is the highest <n> among recorded paths of the form
+// <sourceDir>/<n>.md, such as a change's sources in STATE.json. Other forms
+// (issue:N, URLs, other folders) are ignored. It's 0 when there are none.
+func MaxRecordedId(sourceDir string, recorded []string) int {
+	dir := path.Clean(filepath.ToSlash(SourceDir("", sourceDir)))
+	max := 0
+	for _, r := range recorded {
+		p := path.Clean(filepath.ToSlash(r))
+		if path.Dir(p) != dir {
+			continue
+		}
+		if m := sourceFileRe.FindStringSubmatch(path.Base(p)); m != nil {
+			if n, err := strconv.Atoi(m[1]); err == nil && n > max {
+				max = n
+			}
+		}
+	}
+	return max
+}
+
 // ListSources returns all sources in the store, sorted by id, skipping
 // non-<id>.md files.
 func ListSources(root, sourceDir string) []Source {
@@ -200,12 +221,19 @@ type NewSourceOptions struct {
 	Repo   string
 	Rev    string
 	Body   string
+	// After is an id the new source must be above: the highest intake id a
+	// change still records, so a deleted intake's id is never reused. Callers
+	// that create intakes pass it (the CLI's intakeFloor); 0 means files only.
+	After int
 }
 
 // WriteNewSource creates a new source: next sequential id, source type derived
 // from opts (repo when --repo is set, else issue). Never overwrites.
 func WriteNewSource(root, sourceDir string, opts NewSourceOptions) (Source, error) {
 	id := NextId(root, sourceDir)
+	if id <= opts.After {
+		id = opts.After + 1
+	}
 	src := opts.Source
 	if src != SOURCE_REPO {
 		src = SOURCE_ISSUE
