@@ -209,6 +209,27 @@ func TestIntakeFloorCountsClosedChanges(t *testing.T) {
 	}
 }
 
+// When seeding fails after the intake is written, change new removes the
+// intake, so no file is left that no change records.
+func TestChangeNewRemovesIntakeWhenSeedFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	root := workspace(t)
+	specs := state.SpecsDir(root)
+	// specs/ stays readable, so NextID works, but Seed can't make the folder.
+	if err := os.Chmod(specs, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(specs, 0o755) })
+	if code := runChange(root, []string{"new", "Second"}); code != 1 {
+		t.Fatalf("change new = %d, want 1", code)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md"}) {
+		t.Fatalf("intake files = %v, want only 1.md", got)
+	}
+}
+
 // AC7: when files and records agree, or there's no STATE.json, ids are as before.
 func TestIntakeIdsUnchangedWhenConsistent(t *testing.T) {
 	root := workspace(t)
@@ -243,6 +264,64 @@ func TestSourceNewRefusesCorruptState(t *testing.T) {
 	}
 	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md"}) {
 		t.Fatalf("intake files = %v, want only 1.md", got)
+	}
+}
+
+// AC5: change new skips an intake id a change records, even with the file gone.
+func TestChangeNewSkipsRecordedIntakeIds(t *testing.T) {
+	root := workspace(t) // 1-auth-flow cites 00_intake/1.md
+	if code := runChange(root, []string{"new", "Second"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	if err := os.Remove(filepath.Join(root, "00_intake", "2.md")); err != nil {
+		t.Fatal(err)
+	}
+	if code := runChange(root, []string{"new", "Third"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	changes, err := state.ReadChanges(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changes["3-third"]; got == nil || !slices.Equal(got.Sources, []string{"00_intake/3.md"}) {
+		t.Fatalf("3-third = %+v, want sources [00_intake/3.md]", got)
+	}
+	if got := changes["2-second"].Sources; !slices.Equal(got, []string{"00_intake/2.md"}) {
+		t.Fatalf("2-second sources = %v, want them unchanged", got)
+	}
+
+	// A recorded intake past every file pushes the next id past it too.
+	if _, err := state.SeedChange(root, "4-gone", false, []string{"00_intake/5.md"}); err != nil {
+		t.Fatal(err)
+	}
+	if code := runChange(root, []string{"new", "Fifth"}); code != 0 {
+		t.Fatalf("change new = %d", code)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md", "3.md", "6.md"}) {
+		t.Fatalf("intake files = %v, want 1.md, 3.md and 6.md", got)
+	}
+}
+
+// AC9: when the change id can't be allocated, change new writes nothing.
+func TestChangeNewWritesNothingWhenIdAllocationFails(t *testing.T) {
+	root := workspace(t)
+	stateBefore, _ := os.ReadFile(state.StatePath(root))
+	// A file where the specs folder should be makes NextID's read fail.
+	if err := os.RemoveAll(state.SpecsDir(root)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(state.SpecsDir(root), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, stderr := captureStderr(t, func() int { return runChange(root, []string{"new", "Second"}) })
+	if code != 1 || stderr == "" {
+		t.Fatalf("change new = %d, %q; want 1 and an error", code, stderr)
+	}
+	if got := intakeIDs(t, root); !slices.Equal(got, []string{"1.md"}) {
+		t.Fatalf("intake files = %v, want only 1.md", got)
+	}
+	if after, _ := os.ReadFile(state.StatePath(root)); string(after) != string(stateBefore) {
+		t.Fatal("STATE.json changed")
 	}
 }
 

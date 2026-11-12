@@ -225,7 +225,8 @@ func runChange(root string, args []string) int {
 	if len(repoArgs) > 0 {
 		repo = repoArgs[0]
 	}
-	// Fail on unreadable state before writing the intake and spec folder.
+	// Check and allocate everything before the first write, so a failure here
+	// leaves no intake or spec folder behind.
 	if _, err := state.LoadState(root); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -235,13 +236,8 @@ func runChange(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	src := source.SOURCE_ISSUE
-	if repo != "" {
-		src = source.SOURCE_REPO
-	}
-	created, err := source.WriteNewSource(root, loaded.Effective.SourceDir, source.NewSourceOptions{
-		Title: title, Source: src, Repo: repo, Rev: rev, Body: body,
-	})
+	sourceDir := loaded.Effective.SourceDir
+	floor, err := intakeFloor(root, sourceDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -256,9 +252,23 @@ func runChange(root string, args []string) int {
 		slug = "change"
 	}
 	name := fmt.Sprintf("%d-%s", id, slug)
-	rel := filepath.ToSlash(filepath.Join(loaded.Effective.SourceDir, fmt.Sprintf("%d.md", created.ID)))
+	src := source.SOURCE_ISSUE
+	if repo != "" {
+		src = source.SOURCE_REPO
+	}
+	created, err := source.WriteNewSource(root, sourceDir, source.NewSourceOptions{
+		Title: title, Source: src, Repo: repo, Rev: rev, Body: body, After: floor,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	rel := filepath.ToSlash(filepath.Join(sourceDir, fmt.Sprintf("%d.md", created.ID)))
 	st, err := state.SeedChange(root, name, repo != "", []string{rel}, registered...)
 	if err != nil {
+		// Only a race or an I/O fault gets here; don't leave an intake that no
+		// change records.
+		os.Remove(source.SourcePath(source.SourceDir(root, sourceDir), created.ID))
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
