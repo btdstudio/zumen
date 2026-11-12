@@ -6,7 +6,10 @@
 package source
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -117,12 +120,12 @@ func ToFrontmatter(s Source) string {
 
 var sourceFileRe = regexp.MustCompile(`^(\d+)\.md$`)
 
-// NextId is the highest numeric id present in the store + 1 (1 when empty).
-func NextId(root, sourceDir string) int {
-	dir := SourceDir(root, sourceDir)
-	entries, err := os.ReadDir(dir)
+// maxFileId is the highest <n> among the <n>.md files in the store (0 when
+// there are none).
+func maxFileId(root, sourceDir string) int {
+	entries, err := os.ReadDir(SourceDir(root, sourceDir))
 	if err != nil {
-		return 1
+		return 0
 	}
 	max := 0
 	for _, e := range entries {
@@ -132,8 +135,13 @@ func NextId(root, sourceDir string) int {
 			}
 		}
 	}
-	return max + 1
+	return max
 }
+
+// NextId is the highest numeric id present in the store + 1 (1 when empty).
+// It wraps around when that id is the largest int; WriteNewSource checks for
+// that, so prefer it for creating sources.
+func NextId(root, sourceDir string) int { return maxFileId(root, sourceDir) + 1 }
 
 // MaxRecordedId is the highest <n> among recorded paths of the form
 // <sourceDir>/<n>.md, such as a change's sources in STATE.json. Other forms
@@ -195,18 +203,32 @@ func ReadSource(root, sourceDir string, id int) (Source, error) {
 	return s, nil
 }
 
-// WriteSource writes one source file, refusing to clobber an existing one.
+// WriteSource writes one source file. It creates the file exclusively
+// (O_EXCL), so an existing file is never opened for writing, even when two runs
+// pick the same id at once. An id below 1 is refused.
 func WriteSource(root, sourceDir string, s Source) (Source, error) {
+	if s.ID < 1 {
+		return Source{}, fmt.Errorf("zumen: intake id %d out of range", s.ID)
+	}
 	dir := SourceDir(root, sourceDir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Source{}, err
 	}
 	p := SourcePath(dir, s.ID)
-	if _, err := os.Stat(p); err == nil {
+	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if errors.Is(err, fs.ErrExist) {
 		return Source{}, fmt.Errorf("zumen: source %d already exists at %s; not overwriting", s.ID, p)
 	}
-	if err := os.WriteFile(p, []byte(ToFrontmatter(s)+"\n"), 0o644); err != nil {
+	if err != nil {
 		return Source{}, err
+	}
+	_, werr := f.WriteString(ToFrontmatter(s) + "\n")
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		os.Remove(p) // ours: O_EXCL just created it
+		return Source{}, werr
 	}
 	raw, _ := os.ReadFile(p)
 	written := ParseSource(string(raw), s.ID)
@@ -230,10 +252,11 @@ type NewSourceOptions struct {
 // WriteNewSource creates a new source: next sequential id, source type derived
 // from opts (repo when --repo is set, else issue). Never overwrites.
 func WriteNewSource(root, sourceDir string, opts NewSourceOptions) (Source, error) {
-	id := NextId(root, sourceDir)
-	if id <= opts.After {
-		id = opts.After + 1
+	hi := max(maxFileId(root, sourceDir), opts.After)
+	if hi >= math.MaxInt {
+		return Source{}, fmt.Errorf("zumen: intake id out of range: the highest intake id (%d) leaves no next id", hi)
 	}
+	id := hi + 1
 	src := opts.Source
 	if src != SOURCE_REPO {
 		src = SOURCE_ISSUE
