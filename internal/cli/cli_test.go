@@ -400,6 +400,37 @@ func TestReferencesCheck(t *testing.T) {
 	}
 }
 
+// AC9: a change made without an idea has an intake with no idea key.
+func TestChangeNewIntakeHasNoIdeaKey(t *testing.T) {
+	root := workspace(t)
+	data, err := os.ReadFile(filepath.Join(root, "00_intake", "1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "idea") {
+		t.Fatalf("intake = %q, want no idea key", data)
+	}
+}
+
+// R8: newChange records the idea on the intake, and is otherwise change new.
+func TestNewChangeRecordsTheIdea(t *testing.T) {
+	root := workspace(t)
+	st, sourceID, err := newChange(root, changeSpec{Title: "From an idea", Body: "the summary", Idea: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Name != "2-from-an-idea" || sourceID != 2 {
+		t.Fatalf("change %q, source %d; want 2-from-an-idea and source 2", st.Name, sourceID)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "00_intake", "2.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "---\nid: 2\ntitle: From an idea\nsource: issue\nidea: 3\n---\n\nthe summary\n"; string(data) != want {
+		t.Fatalf("intake = %q, want %q", data, want)
+	}
+}
+
 func TestSourceAndAdrNewRejectStrayArguments(t *testing.T) {
 	root := workspace(t)
 	for _, run := range []struct {

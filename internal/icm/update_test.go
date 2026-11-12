@@ -513,3 +513,84 @@ func TestUpdateAddsReferencesWithoutTouchingUserFiles(t *testing.T) {
 		}
 	}
 }
+
+// AC1: update adds the ideas room to an older workspace without touching a user file.
+func TestUpdateAddsIdeasWithoutTouchingUserFiles(t *testing.T) {
+	dir := scaffoldWorkspace(t)
+	ideaFiles := []string{"ideas/context.md", "ideas/personas/facilitator.md", "ideas/templates/summary.md", "ideas/templates/log-entry.md"}
+	for _, rel := range ideaFiles {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("init didn't create %s: %v", rel, err)
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "ideas")); err != nil {
+		t.Fatal(err)
+	}
+	user := map[string]string{
+		"00_intake/1.md":                "an intake",
+		"specs/1-x/functional-spec.md":  "a spec",
+		"references/index.md":           "my index",
+		"references/notes.md":           "a note",
+		"04_architecture/adr/0001-x.md": "an adr",
+	}
+	for rel, content := range user {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rep, err := Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range ideaFiles {
+		if !slices.Contains(rep.Updated, rel) {
+			t.Errorf("updated = %v, want %s", rep.Updated, rel)
+		}
+	}
+	for rel, content := range user {
+		if got, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel))); err != nil || string(got) != content {
+			t.Errorf("%s changed: %q, %v", rel, got, err)
+		}
+	}
+}
+
+// AC17: a workspace whose AGENTS.md came from v0.8.0 and was edited gets the
+// "Work an idea" row and step 0 through the section merge.
+func TestUpdateDeliversTheIdeasRowThroughTheMerge(t *testing.T) {
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "agents", "v0.8.0-AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := scaffoldWorkspace(t)
+	path := filepath.Join(dir, "AGENTS.md")
+	if err := os.WriteFile(path, []byte(editAgents(t, string(fixture))), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Merged) != 1 || len(rep.Skipped) != 0 {
+		t.Fatalf("rep = %+v, want AGENTS.md merged", rep)
+	}
+	got, _ := os.ReadFile(path)
+	text := string(got)
+	for _, want := range []string{
+		"| Work an idea | `ideas/` | facilitator |",
+		"0. **Work an idea first** (optional)",
+		"`zumen idea promote",
+		"- Go 1.22, Postgres",
+		"## Team notes\n\nkeep me\n",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("merged AGENTS.md lacks %q", want)
+		}
+	}
+	if strings.Index(text, "| Work an idea |") > strings.Index(text, "| Define the base source |") {
+		t.Error("the Work an idea row isn't first in the routing table")
+	}
+}

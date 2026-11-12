@@ -27,9 +27,13 @@
     "06_publish/personas/publisher.md": "7ff4b49f92bf9989c7d0aa326341093ace38cea8975c439702d803af5fef8fd4",
     "06_publish/sync-examples/github.md": "e39075848ec5e07edeff09a7946e1b0a0bc9ee61d5722429422fb8232e580ef4",
     "06_publish/sync.md": "ab1f0ea121009eb4d4d64310c096ea17df078a8a9b9f5b87c63c776dfd7c08c5",
-    "AGENTS.md": "935e150785dc5fd590ca228f7d07c0481e13e2dc237245fd7a48cc324433d530",
+    "AGENTS.md": "0d14dad313c5e151f9d7f467d80c138fe99a6b46c39dc4f125fb817da45e884e",
     "CLAUDE.md": "b7e2c49d980126d99a4f2853bd6c40d216c7a710f0265d729de39aa692d8f25b",
     "README.md": "d5a0d59409d812fd4182797820d6ef1d9b4dcefd2e4ff012945bd68472ee9b4d",
+    "ideas/context.md": "23909cad7d826310d740d76f22303121cb5eab3545cb5cb1e866bc38cbf7db64",
+    "ideas/personas/facilitator.md": "0e575069335ca6e7cfc103556d48df1cd2f9b9e58b81ae0d626865fa0bd80d42",
+    "ideas/templates/log-entry.md": "2ded0a9d2c441fc9f51fc59dc926a859061df79bbe5fba3b673bf3f1d1612891",
+    "ideas/templates/summary.md": "f19359ad59da1efe3d9ab47427c1cee7071a2d525299031b6005846bb5e35a2a",
     "references/context.md": "5e3dec0674702ef5f4ceb339f498b3484235e5adba902f5840834c9c6066e048",
     "specs/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   }

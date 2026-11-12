@@ -63,6 +63,13 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check `specs/<change>/README.md`: the narrative region is yours, the generated region is rewritten; `--check` exits 1 if it's out of date |
+| `zumen idea new <title>` | create an idea in `ideas/`, from the summary template |
+| `zumen idea list` | list ideas with their status, and the reason for a parked or dropped one |
+| `zumen idea show <id>` | print an idea's summary and status |
+| `zumen idea park <id> --reason <r>` | set an open idea aside, with a reason |
+| `zumen idea drop <id> --reason <r>` | drop an open idea, with a reason; its folder stays |
+| `zumen idea reopen <id> --reason <r>` | reopen a parked or dropped idea, with a reason |
+| `zumen idea promote <id> --title <t> [--repo <name\|path>]... [--rev <r>]` | start a change from an idea: its intake is the idea's summary, and an idea can be promoted more than once |
 | `zumen references check` | warn about unindexed files in `references/` and index entries that lack a file or a field |
 | `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
 | `zumen repo list` | list repos and their local paths |
@@ -79,6 +86,10 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 ## How to start a change
 
+0. **Work an idea first** (optional) — `zumen idea new "Title"`, then work it with the
+   facilitator (`ideas/personas/facilitator.md`). When it's ready, `zumen idea promote
+   <id> --title "Title" --repo <name>` starts the change, with the idea's summary as
+   its intake. Skip this when you already know what to build.
 1. **Create a change** — `zumen change new "Title"` (add `--repo <name>` for
    each registered repo, or `--repo <path>` for a single unregistered one). This writes the intake (`00_intake/<id>.md`), makes
    a `specs/<n>-<slug>/` folder, seeds `STATE.json`, and switches to it.
@@ -88,6 +99,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 | Task / Intent | Directory | Persona | Read | Skip |
 |---|---|---|---|---|
+| Work an idea | `ideas/` | facilitator | `ideas/context.md`, `ideas/<n>-<slug>/*`, `references/index.md` | `specs/*`, the repos |
 | Define the base source | `00_intake/` | — | `00_intake/context.md`, `references/index.md` | `specs/*` |
 | External research | `01_research/` | researcher | `01_research/context.md`, `00_intake/<id>.md`, `references/index.md` | `specs/*`, the repos |
 | Explore the repos | `02_explore/` | explorer | `02_explore/context.md`, the repos (`zumen repo list`), `references/index.md` | `specs/*` |
@@ -103,6 +115,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 - Tickets: `specs/<n>-<slug>/tickets/<ID>.md`, with ids like `S-0014` from one
   workspace-wide sequence
 - Intake: `00_intake/<id>.md`
+- Ideas: `ideas/<n>-<slug>/summary.md|log.md`
 - Research: `01_research/<n>-<slug>/<topic>.md`
 - Findings: `02_explore/<n>-<slug>/<repo>.md`, `02_explore/<n>-<slug>/synthesis.md`
 - ADRs: `04_architecture/adr/NNNN-<slug>.md`
@@ -163,6 +176,7 @@ repo, but writes no `.gitattributes` or `.gitkeep`.
 ├── 05_breakdown/         # architect
 ├── 06_publish/           # publisher + sync.md
 ├── references/           # reference files + your own index.md (zumen never edits it)
+├── ideas/                # ideas, one <n>-<slug>/ folder each (summary.md, log.md)
 └── specs/                # per-change artifacts and tickets (<n>-<slug>/)
 ```
 

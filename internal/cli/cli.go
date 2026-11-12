@@ -50,6 +50,7 @@ var handlers = map[string]func(root string, args []string) int{
 	"reopen":     runReopen,
 	"tickets":    runTickets,
 	"overview":   runOverview,
+	"idea":       runIdea,
 	"references": runReferences,
 	"repo": func(root string, args []string) int {
 		return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)
@@ -218,38 +219,53 @@ func runChange(root string, args []string) int {
 		fmt.Fprintln(os.Stderr, usageLine("change", "new"))
 		return 1
 	}
-	registered, err := changeRepos(root, repoArgs)
+	st, sourceID, err := newChange(root, changeSpec{Title: title, Rev: rev, Body: body, Repos: repoArgs})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	repo := ""
-	if len(repoArgs) > 0 {
-		repo = repoArgs[0]
+	printCreatedChange(st, sourceID)
+	return 0
+}
+
+// changeSpec is what newChange needs: the title, an optional pin and body, the
+// --repo arguments, and the idea the change comes from (0 for none).
+type changeSpec struct {
+	Title, Rev, Body string
+	Repos            []string
+	Idea             int
+}
+
+// newChange writes a change's intake and seeds the change, which `change new` and
+// `idea promote` share. It checks and allocates everything before the first write,
+// so a failure there leaves no intake or spec folder behind, and removes the intake
+// if seeding then fails. It prints nothing.
+func newChange(root string, spec changeSpec) (state.State, int, error) {
+	registered, err := changeRepos(root, spec.Repos)
+	if err != nil {
+		return state.State{}, 0, err
 	}
-	// Check and allocate everything before the first write, so a failure here
-	// leaves no intake or spec folder behind.
+	repo := ""
+	if len(spec.Repos) > 0 {
+		repo = spec.Repos[0]
+	}
 	if _, err := state.LoadState(root); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
 	loaded, err := settings.LoadSettings(root)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
 	sourceDir := loaded.Effective.SourceDir
 	floor, err := intakeFloor(root, sourceDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
 	id, err := state.NextChangeId(root)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
-	slug := state.Slugify(title)
+	slug := state.Slugify(spec.Title)
 	if slug == "" {
 		slug = "change"
 	}
@@ -259,11 +275,10 @@ func runChange(root string, args []string) int {
 		src = source.SOURCE_REPO
 	}
 	created, err := source.WriteNewSource(root, sourceDir, source.NewSourceOptions{
-		Title: title, Source: src, Repo: repo, Rev: rev, Body: body, After: floor,
+		Title: spec.Title, Source: src, Repo: repo, Rev: spec.Rev, Body: spec.Body, After: floor, Idea: spec.Idea,
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
 	rel := filepath.ToSlash(filepath.Join(sourceDir, fmt.Sprintf("%d.md", created.ID)))
 	st, err := state.SeedChange(root, name, repo != "", []string{rel}, registered...)
@@ -271,16 +286,19 @@ func runChange(root string, args []string) int {
 		// Only a race or an I/O fault gets here; don't leave an intake that no
 		// change records.
 		os.Remove(source.SourcePath(source.SourceDir(root, sourceDir), created.ID))
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return state.State{}, 0, err
 	}
-	fmt.Printf("created change %s (source #%d)\n", st.Name, created.ID)
+	return st, created.ID, nil
+}
+
+// printCreatedChange prints what `change new` reports for a new change.
+func printCreatedChange(st state.State, sourceID int) {
+	fmt.Printf("created change %s (source #%d)\n", st.Name, sourceID)
 	for _, phase := range []string{"explore", "synthesis"} {
 		if st.Gates[phase] == kiso.Skipped {
 			fmt.Printf("%s skipped\n", phase)
 		}
 	}
-	return 0
 }
 
 // intakeFloor is the highest intake id any change records in its sources,

@@ -57,7 +57,7 @@ func helpCases() map[string]string {
 		}
 		cases[strings.Join(c.path, " ")] = helpText(c.path)
 	}
-	for _, g := range []string{"source", "adr", "tickets", "change", "references"} {
+	for _, g := range []string{"source", "adr", "tickets", "change", "references", "idea"} {
 		cases[g] = helpText([]string{g})
 	}
 	for _, verb := range []string{"add", "list", "path", "doctor"} {
@@ -281,6 +281,7 @@ func TestGroupHelpListsEveryVerb(t *testing.T) {
 		"tickets":    {"new", "check", "status", "order", "ready", "mark-published", "unfreeze"},
 		"repo":       {"add", "list", "path", "doctor"},
 		"references": {"check"},
+		"idea":       {"new", "list", "show", "park", "drop", "reopen", "promote"},
 	} {
 		var out bytes.Buffer
 		if code, ok := Help([]string{group, "--help"}, &out); !ok || code != 0 {
