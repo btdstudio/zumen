@@ -359,6 +359,47 @@ func TestIntakeOverflowIsRefused(t *testing.T) {
 	}
 }
 
+// AC2, AC3: references check prints its warnings and always exits 0.
+func TestReferencesCheck(t *testing.T) {
+	root := workspace(t)
+	if code, out := captureStdout(t, func() int { return runReferences(root, []string{"check"}) }); code != 0 || !strings.Contains(out, "no references/ folder") {
+		t.Fatalf("no folder: %d, %q; want 0 and a note", code, out)
+	}
+	write := func(rel, content string) {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("references/context.md", "guide")
+	write("references/notes.md", "notes")
+	write("references/stray.pdf", "pdf")
+	write("references/index.md", "- `notes.md` — Notes\n  - purpose: p\n  - added: 2026-11-12\n- `gone.md`\n  - purpose: p\n  - from: me\n  - added: 2026-11-12\n")
+	code, out := captureStdout(t, func() int { return runReferences(root, []string{"check"}) })
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 even with warnings", code)
+	}
+	for _, want := range []string{
+		"! notes.md: missing from",
+		"! gone.md: listed in the index, but the file is missing",
+		"! stray.pdf: not in references/index.md",
+		"1 of 2 file(s) indexed, 3 warning(s)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+	for _, args := range [][]string{nil, {"list"}, {"check", "extra"}} {
+		code, stderr := captureStderr(t, func() int { return runReferences(root, args) })
+		if code != 1 || !strings.Contains(stderr, "zumen references check") {
+			t.Errorf("%q = %d, %q; want 1 and the usage", args, code, stderr)
+		}
+	}
+}
+
 func TestSourceAndAdrNewRejectStrayArguments(t *testing.T) {
 	root := workspace(t)
 	for _, run := range []struct {

@@ -13,6 +13,7 @@ import (
 	"github.com/btdstudio/kiso/repos"
 	kiso "github.com/btdstudio/kiso/state"
 	"github.com/btdstudio/zumen/internal/adr"
+	"github.com/btdstudio/zumen/internal/reference"
 	"github.com/btdstudio/zumen/internal/settings"
 	"github.com/btdstudio/zumen/internal/source"
 	"github.com/btdstudio/zumen/internal/state"
@@ -39,16 +40,17 @@ func Run(args []string) int {
 // handlers are the commands Run dispatches; main dispatches init, update, check
 // and version itself.
 var handlers = map[string]func(root string, args []string) int{
-	"status":   func(root string, _ []string) int { return runStatus(root) },
-	"settings": func(root string, _ []string) int { return runSettings(root) },
-	"switch":   runSwitch,
-	"source":   runSource,
-	"adr":      runAdr,
-	"change":   runChange,
-	"gate":     runGate,
-	"reopen":   runReopen,
-	"tickets":  runTickets,
-	"overview": runOverview,
+	"status":     func(root string, _ []string) int { return runStatus(root) },
+	"settings":   func(root string, _ []string) int { return runSettings(root) },
+	"switch":     runSwitch,
+	"source":     runSource,
+	"adr":        runAdr,
+	"change":     runChange,
+	"gate":       runGate,
+	"reopen":     runReopen,
+	"tickets":    runTickets,
+	"overview":   runOverview,
+	"references": runReferences,
 	"repo": func(root string, args []string) int {
 		return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)
 	},
@@ -608,4 +610,27 @@ func runAdr(root string, args []string) int {
 		fmt.Fprint(os.Stderr, usageText("adr"))
 		return 1
 	}
+}
+
+// runReferences runs `zumen references check`. Warnings never change the exit
+// code, so a check can sit in a script.
+func runReferences(root string, args []string) int {
+	if len(args) != 1 || args[0] != "check" {
+		fmt.Fprint(os.Stderr, usageText("references"))
+		return 1
+	}
+	res, err := reference.Check(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if !res.Present {
+		fmt.Println("no references/ folder: run `zumen update` to add it")
+		return 0
+	}
+	for _, f := range res.Findings {
+		fmt.Println("!", f.Message)
+	}
+	fmt.Printf("%d of %d file(s) indexed, %d warning(s)\n", res.Indexed, res.Files, len(res.Findings))
+	return 0
 }

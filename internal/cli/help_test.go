@@ -57,7 +57,7 @@ func helpCases() map[string]string {
 		}
 		cases[strings.Join(c.path, " ")] = helpText(c.path)
 	}
-	for _, g := range []string{"source", "adr", "tickets", "change"} {
+	for _, g := range []string{"source", "adr", "tickets", "change", "references"} {
 		cases[g] = helpText([]string{g})
 	}
 	for _, verb := range []string{"add", "list", "path", "doctor"} {
@@ -275,11 +275,12 @@ func TestCommandTablesMatchUsage(t *testing.T) {
 // written out here, not against the table it's printed from.
 func TestGroupHelpListsEveryVerb(t *testing.T) {
 	for group, verbs := range map[string][]string{
-		"source":  {"new", "list", "show"},
-		"adr":     {"new", "list", "show"},
-		"change":  {"new", "close"},
-		"tickets": {"new", "check", "status", "order", "ready", "mark-published", "unfreeze"},
-		"repo":    {"add", "list", "path", "doctor"},
+		"source":     {"new", "list", "show"},
+		"adr":        {"new", "list", "show"},
+		"change":     {"new", "close"},
+		"tickets":    {"new", "check", "status", "order", "ready", "mark-published", "unfreeze"},
+		"repo":       {"add", "list", "path", "doctor"},
+		"references": {"check"},
 	} {
 		var out bytes.Buffer
 		if code, ok := Help([]string{group, "--help"}, &out); !ok || code != 0 {
