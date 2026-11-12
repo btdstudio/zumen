@@ -13,7 +13,7 @@ name in `external`:
 | The ticket | Do |
 |---|---|
 | `status: draft` | Skip it. It hasn't been readied for publishing. |
-| Its parent, a `depends_on` ticket or its `supersedes` target has no `external.<tool>` | Don't create or update it. Report it as **blocked**, naming that ticket. |
+| Its parent (if it has one), a `depends_on` ticket or its `supersedes` target has no `external.<tool>` | Don't create or update it. Report it as **blocked**, naming that ticket. |
 | No `external.<tool>` | Create the item, then run `zumen tickets mark-published <id> --external <tool>=<item-id>`. |
 | Has the id, and no `published_hash` (unfrozen) | Update the item, then run `mark-published` with the same id to re-freeze. |
 | Has the id and a `published_hash` (frozen) | Skip it. |
@@ -32,6 +32,7 @@ Read the live item by its external id. tomo intake and drift review use this.
 
 ## link
 
-Create the relations, each of which needs the other item's id: parent/child,
-predecessor (`depends_on`), and `supersedes`. A superseded item is also linked to its
+Create the relations, each of which needs the other item's id: parent/child
+(only for a ticket that has a parent; a flat breakdown has none), predecessor
+(`depends_on`), and `supersedes`. A superseded item is also linked to its
 replacement or closed.

@@ -70,6 +70,33 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"05_breakdown/context.md", "refresh the narrative"},
 		{"05_breakdown/personas/architect.md", "[--requirements <id,...>]"},
 		{"05_breakdown/personas/architect.md", "cites the requirements it satisfies"},
+		{"05_breakdown/personas/architect.md", "stories and tasks with no parent"},
+		{"05_breakdown/personas/architect.md", "one reviewable PR"},
+		{"05_breakdown/personas/architect.md", "too large to review"},
+		{"05_breakdown/personas/architect.md", "ship at different times"},
+		{"05_breakdown/personas/architect.md", "A repo's only story drops the template's split-reason line"},
+		{"05_breakdown/personas/architect.md", "more than 8 stories"},
+		{"05_breakdown/personas/architect.md", "Never add an epic or feature to group one"},
+		{"05_breakdown/personas/architect.md", "There are no release tickets"},
+		{"05_breakdown/personas/architect.md", "its last story"},
+		{"05_breakdown/personas/architect.md", "`tomo issues new`"},
+		{"05_breakdown/personas/architect.md", "Tickets, not file-scoped tasks"},
+		{"05_breakdown/personas/architect.md", "Never set `status: ready`"},
+		{"05_breakdown/personas/architect.md", "publish target groups tickets"},
+		{"05_breakdown/personas/architect.md", "Add an epic only above two or more features"},
+		{"05_breakdown/personas/architect.md", "it isn't a target"},
+		{"05_breakdown/personas/architect.md", "Use a task for work in one repo"},
+		{"05_breakdown/personas/architect.md", "`depends_on` the last story of the repo it bumps"},
+		{"05_breakdown/personas/architect.md", "A story lands in one repo"},
+		{"05_breakdown/templates/ticket.md", "too large to review as one PR"},
+		{"05_breakdown/context.md", "features and epics only where grouping helps"},
+		{"AGENTS.md", "features and epics only where grouping helps"},
+		{"06_publish/sync.md", "only for a ticket that has a parent"},
+		{"06_publish/sync-examples/github.md", "needed only when the change has epics or features"},
+		{"06_publish/sync.md", "Its parent (if it has one)"},
+		{"06_publish/sync-examples/github.md", "Its parent (if it has one)"},
+		{"06_publish/sync-examples/github.md", "Only for a ticket that has a parent"},
+		{"06_publish/sync-examples/github.md", "needs no planning repo"},
 		{"03_spec/personas/analyst.md", "on one line"},
 		{"03_spec/templates/functional-spec.md", "all on one line"},
 		{"AGENTS.md", "`zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>]`"},
@@ -78,8 +105,47 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(data), tc.want) {
+		// Whitespace is collapsed, so rewrapping a paragraph can't hide a phrase.
+		if !strings.Contains(strings.Join(strings.Fields(string(data)), " "), tc.want) {
 			t.Errorf("%s lacks %q", tc.file, tc.want)
 		}
+	}
+}
+
+// AC4: no description of breakdown, in the scaffold or the README, says it always
+// produces epics and features. Whitespace is collapsed, so a rewrap can't hide it.
+func TestBreakdownWordingIsNotAlwaysEpics(t *testing.T) {
+	files := map[string]string{}
+	sub, err := fs.Sub(zumen.ScaffoldFS, "scaffold")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = fs.WalkDir(sub, ".", func(rel string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(rel, ".md") {
+			return err
+		}
+		data, err := fs.ReadFile(sub, rel)
+		files["scaffold/"+rel] = string(data)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files["README.md"] = string(readme)
+
+	for name, text := range files {
+		flat := strings.Join(strings.Fields(text), " ")
+		for _, old := range []string{"epics, features, stories and tasks", "epics, then features"} {
+			if strings.Contains(flat, old) {
+				t.Errorf("%s still says %q", name, old)
+			}
+		}
+	}
+	if !strings.Contains(files["README.md"], "features and epics only where grouping helps") {
+		t.Error("README.md doesn't say features and epics are only for where grouping helps")
 	}
 }
