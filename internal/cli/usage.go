@@ -49,6 +49,7 @@ var commands = []command{
 		notes: "  --force    allow it outside the publish phase\n"},
 	{path: []string{"tickets", "unfreeze"}, synopsis: "zumen tickets unfreeze <id> --reason <r>", summary: "clear a ticket's freeze"},
 	{path: []string{"overview"}, synopsis: "zumen overview [<change>] [--check] [--stdout]", summary: "write or check the change's README overview"},
+	{path: []string{"references", "check"}, synopsis: "zumen references check", summary: "warn about unindexed references and bad index entries"},
 	{path: []string{"repo"}, raw: repos.Usage("zumen")},
 	{path: []string{"env"}, synopsis: "zumen env", summary: "print harness flags for the active change's repos"},
 	{path: []string{"check"}, synopsis: "zumen check", summary: "validate the embedded scaffold"},
@@ -143,7 +144,7 @@ func usageLine(path ...string) string {
 func helpText(path []string) string {
 	text := usageText(path...)
 	cmds := group(path)
-	if len(cmds) == 1 && cmds[0].raw == "" {
+	if len(cmds) == 1 && cmds[0].raw == "" && slices.Equal(cmds[0].path, path) {
 		text += "\n" + cmds[0].summary + "\n" + cmds[0].notes
 	}
 	return text

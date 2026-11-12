@@ -48,6 +48,7 @@ go install github.com/btdstudio/zumen/cmd/zumen@latest
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check the change's README overview |
+| `zumen references check` | warn about unindexed files in `references/` and index entries that lack a file or a field |
 | `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
 | `zumen repo list` | list repos and their local paths |
 | `zumen repo path <name> <path>` | set a repo's local path |
@@ -103,6 +104,7 @@ see [Version control](#version-control).
 ├── 04_architecture/   architect + adr/
 ├── 05_breakdown/      architect
 ├── 06_publish/        publisher + sync.md
+├── references/        reference files + your own index.md (zumen never edits it)
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
 

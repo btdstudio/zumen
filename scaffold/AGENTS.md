@@ -4,6 +4,9 @@ Layer 1 root map (Interpretable Context Methodology). Every agent reads this
 file first, then navigates by the routing table below. `CLAUDE.md` just points
 here; this file is harness-agnostic and the single source of truth.
 
+Edits inside zumen's `##` sections are overwritten by `zumen update`. Keep your own
+notes in `## Tech stack & standards` or in sections of your own.
+
 ## The loop
 
 A change is an initiative, often across many repos, and ends in tickets. It flows
@@ -60,6 +63,7 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check `specs/<change>/README.md`: the narrative region is yours, the generated region is rewritten; `--check` exits 1 if it's out of date |
+| `zumen references check` | warn about unindexed files in `references/` and index entries that lack a file or a field |
 | `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
 | `zumen repo list` | list repos and their local paths |
 | `zumen repo path <name> <path>` | set a repo's local path |
@@ -84,14 +88,14 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 | Task / Intent | Directory | Persona | Read | Skip |
 |---|---|---|---|---|
-| Define the base source | `00_intake/` | — | `00_intake/context.md` | `specs/*` |
-| External research | `01_research/` | researcher | `01_research/context.md`, `00_intake/<id>.md` | `specs/*`, the repos |
-| Explore the repos | `02_explore/` | explorer | `02_explore/context.md`, the repos (`zumen repo list`) | `specs/*` |
-| Synthesize findings | `02_explore/` | architect | `02_explore/context.md`, `02_explore/<n>-<slug>/*` | `specs/*` |
-| Write the spec | `03_spec/` | analyst | `03_spec/context.md`, `00_intake/*`, `01_research/<n>-<slug>/*`, `02_explore/<n>-<slug>/*` | the repos |
-| Design the architecture | `04_architecture/` | architect | `04_architecture/context.md`, `specs/<n>-<slug>/functional-spec.md`, `02_explore/<n>-<slug>/*` | the repos |
-| Break down into tickets | `05_breakdown/` | architect | `05_breakdown/context.md`, `specs/<n>-<slug>/functional-spec.md`, `specs/<n>-<slug>/architecture.md` | the repos |
-| Publish tickets | `06_publish/` | publisher | `06_publish/context.md`, `06_publish/sync.md`, `specs/<n>-<slug>/tickets/*` | the repos, `01_research/*`, `02_explore/*` |
+| Define the base source | `00_intake/` | — | `00_intake/context.md`, `references/index.md` | `specs/*` |
+| External research | `01_research/` | researcher | `01_research/context.md`, `00_intake/<id>.md`, `references/index.md` | `specs/*`, the repos |
+| Explore the repos | `02_explore/` | explorer | `02_explore/context.md`, the repos (`zumen repo list`), `references/index.md` | `specs/*` |
+| Synthesize findings | `02_explore/` | architect | `02_explore/context.md`, `02_explore/<n>-<slug>/*`, `references/index.md` | `specs/*` |
+| Write the spec | `03_spec/` | analyst | `03_spec/context.md`, `00_intake/*`, `01_research/<n>-<slug>/*`, `02_explore/<n>-<slug>/*`, `references/index.md` | the repos |
+| Design the architecture | `04_architecture/` | architect | `04_architecture/context.md`, `specs/<n>-<slug>/functional-spec.md`, `02_explore/<n>-<slug>/*`, `references/index.md` | the repos |
+| Break down into tickets | `05_breakdown/` | architect | `05_breakdown/context.md`, `specs/<n>-<slug>/functional-spec.md`, `specs/<n>-<slug>/architecture.md`, `references/index.md` | the repos |
+| Publish tickets | `06_publish/` | publisher | `06_publish/context.md`, `06_publish/sync.md`, `specs/<n>-<slug>/tickets/*`, `references/index.md` | the repos, `01_research/*`, `02_explore/*` |
 
 ## Naming conventions
 
@@ -122,7 +126,9 @@ repo, but writes no `.gitattributes` or `.gitkeep`.
 - Each phase stops at a gate for human approval — never proceed past a gate on
   your own. Record transitions with `zumen gate <phase> <status>`. `--force`
   overrides the order check and is logged; only use it when a human says so.
-- Read only the files the routing table names for your task; skip the rest.
+- Read only the files the routing table names for your task; skip the rest. Any
+  phase may also open a file listed in `references/index.md`: reference material such
+  as notes, designs and exported chats. `references/context.md` has the index format.
 - Skip a phase with `zumen gate <phase> skipped --reason <r>`. Use `zumen reopen
   <phase> --reason <r>` to go back: it clears the approvals after that phase,
   because they no longer hold. `zumen status` warns if a repo's explore is skipped.
@@ -156,6 +162,7 @@ repo, but writes no `.gitattributes` or `.gitkeep`.
 ├── 04_architecture/      # architect + adr/
 ├── 05_breakdown/         # architect
 ├── 06_publish/           # publisher + sync.md
+├── references/           # reference files + your own index.md (zumen never edits it)
 └── specs/                # per-change artifacts and tickets (<n>-<slug>/)
 ```
 

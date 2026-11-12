@@ -87,11 +87,18 @@ func runUpdate() int {
 	for _, rel := range rep.Updated {
 		fmt.Println("updated", rel)
 	}
+	for _, rel := range rep.Merged {
+		fmt.Printf("merged %s (zumen's ## sections updated; your sections and the text under the title kept)\n", rel)
+	}
 	for _, rel := range rep.Skipped {
+		if reason, ok := rep.NotMerged[rel]; ok {
+			fmt.Printf("skipped (edited) %s: can't merge: %s\n", rel, reason)
+			continue
+		}
 		fmt.Println("skipped (edited)", rel)
 	}
-	fmt.Printf("update complete (%d updated, %d skipped, %d unchanged)\n",
-		len(rep.Updated), len(rep.Skipped), len(rep.Unchanged))
+	fmt.Printf("update complete (%d updated, %d skipped, %d unchanged, %d merged)\n",
+		len(rep.Updated), len(rep.Skipped), len(rep.Unchanged), len(rep.Merged))
 	return 0
 }
 
