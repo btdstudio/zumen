@@ -100,6 +100,29 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"references/context.md", "`index.md` is yours: zumen never creates, edits or overwrites it"},
 		{"references/context.md", "`zumen references check` warns about"},
 		{"references/context.md", "A folder isn't an entry: list each file in it separately"},
+		{"ideas/context.md", "An idea isn't a change"},
+		{"ideas/context.md", "Ideas are dropped, never deleted"},
+		{"ideas/context.md", "`zumen idea new` uses a built-in copy of `templates/summary.md`"},
+		{"ideas/context.md", "An idea can be promoted more than once, to split it"},
+		{"ideas/context.md", "Promote only when the person asks"},
+		{"ideas/context.md", "goes in that idea's log"},
+		{"ideas/context.md", "a `from` that starts with `AI chat`"},
+		{"ideas/personas/facilitator.md", "Draw out the person's options before offering your own"},
+		{"ideas/personas/facilitator.md", "Label who raised each option in the log: person or agent"},
+		{"ideas/personas/facilitator.md", "Skip a step only by noting the skip and the reason in the log"},
+		{"ideas/personas/facilitator.md", "Write the session's entry in `log.md` before you stop"},
+		{"ideas/personas/facilitator.md", "Append to the log, never rewrite it"},
+		{"ideas/personas/facilitator.md", "Never write intakes, specs or tickets. Never promote an idea unless the person asks"},
+		{"ideas/personas/facilitator.md", "a `from` that starts with `AI chat`"},
+		{"ideas/templates/log-entry.md", "**Questions asked**"},
+		{"ideas/templates/log-entry.md", "<option> (person)"},
+		{"ideas/templates/log-entry.md", "<option> (agent)"},
+		{"ideas/templates/log-entry.md", "**Choice**"},
+		{"ideas/templates/log-entry.md", "**Reason**"},
+		{"AGENTS.md", "| Work an idea | `ideas/` | facilitator | `ideas/context.md`, `ideas/<n>-<slug>/*`, `references/index.md` | `specs/*`, the repos |"},
+		{"AGENTS.md", "0. **Work an idea first** (optional)"},
+		{"AGENTS.md", "- Ideas: `ideas/<n>-<slug>/summary.md|log.md`"},
+		{"AGENTS.md", "ideas/ # ideas, one <n>-<slug>/ folder each (summary.md, log.md)"},
 		{"06_publish/sync.md", "only for a ticket that has a parent"},
 		{"06_publish/sync-examples/github.md", "needed only when the change has epics or features"},
 		{"06_publish/sync.md", "Its parent (if it has one)"},
@@ -212,9 +235,59 @@ func TestReadmeListsTheReferencesRoom(t *testing.T) {
 	for _, want := range []string{
 		"references/ reference files + your own index.md (zumen never edits it)",
 		"`zumen references check`",
+		"ideas/ ideas, one <n>-<slug>/ folder each (summary.md, log.md)",
+		"## Ideas",
+		"`zumen idea promote <id> --title <t>`",
+		"parked or dropped, never deleted",
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("README.md lacks %q", want)
+		}
+	}
+}
+
+// AC10: the facilitator works in five ordered steps.
+func TestFacilitatorStepsAreInOrder(t *testing.T) {
+	text := strings.Join(strings.Fields(scaffoldText(t, "ideas/personas/facilitator.md")), " ")
+	last := -1
+	for n, step := range []string{
+		"1. **Clarify the problem.**",
+		"2. **Let it grow.**",
+		"3. **Challenge it with a pre-mortem.**",
+		"4. **Cut scope.**",
+		"5. **Update the summary.**",
+	} {
+		i := strings.Index(text, step)
+		if i < 0 {
+			t.Fatalf("step %d, %q, isn't in the persona", n+1, step)
+		}
+		if i < last {
+			t.Errorf("step %d, %q, comes before an earlier step", n+1, step)
+		}
+		if strings.Count(text, step) != 1 {
+			t.Errorf("step %d, %q, appears more than once", n+1, step)
+		}
+		last = i
+	}
+	if strings.Contains(text, "6. **") {
+		t.Error("the persona has more than five numbered steps")
+	}
+	// A cut becomes a no-go or a parked idea.
+	for _, want := range []string{"as a no-go in the summary", "a new idea that you park"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("step 4 lacks %q", want)
+		}
+	}
+}
+
+// N4: the ideas room names no third-party tool.
+func TestIdeasRoomNamesNoTools(t *testing.T) {
+	for _, rel := range []string{"ideas/context.md", "ideas/personas/facilitator.md", "ideas/templates/log-entry.md", "ideas/templates/summary.md"} {
+		text := strings.ToLower(scaffoldText(t, rel))
+		for _, tool := range []string{"obsidian", "notion", "confluence", "chatgpt", "claude", "gemini", "copilot", "slack", "github", "google", "miro", "figma", "jira"} {
+			if strings.Contains(text, tool) {
+				t.Errorf("%s names %q", rel, tool)
+			}
 		}
 	}
 }

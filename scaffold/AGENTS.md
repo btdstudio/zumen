@@ -86,6 +86,10 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 ## How to start a change
 
+0. **Work an idea first** (optional) — `zumen idea new "Title"`, then work it with the
+   facilitator (`ideas/personas/facilitator.md`). When it's ready, `zumen idea promote
+   <id> --title "Title" --repo <name>` starts the change, with the idea's summary as
+   its intake. Skip this when you already know what to build.
 1. **Create a change** — `zumen change new "Title"` (add `--repo <name>` for
    each registered repo, or `--repo <path>` for a single unregistered one). This writes the intake (`00_intake/<id>.md`), makes
    a `specs/<n>-<slug>/` folder, seeds `STATE.json`, and switches to it.
@@ -95,6 +99,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 
 | Task / Intent | Directory | Persona | Read | Skip |
 |---|---|---|---|---|
+| Work an idea | `ideas/` | facilitator | `ideas/context.md`, `ideas/<n>-<slug>/*`, `references/index.md` | `specs/*`, the repos |
 | Define the base source | `00_intake/` | — | `00_intake/context.md`, `references/index.md` | `specs/*` |
 | External research | `01_research/` | researcher | `01_research/context.md`, `00_intake/<id>.md`, `references/index.md` | `specs/*`, the repos |
 | Explore the repos | `02_explore/` | explorer | `02_explore/context.md`, the repos (`zumen repo list`), `references/index.md` | `specs/*` |
@@ -110,6 +115,7 @@ it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` o
 - Tickets: `specs/<n>-<slug>/tickets/<ID>.md`, with ids like `S-0014` from one
   workspace-wide sequence
 - Intake: `00_intake/<id>.md`
+- Ideas: `ideas/<n>-<slug>/summary.md|log.md`
 - Research: `01_research/<n>-<slug>/<topic>.md`
 - Findings: `02_explore/<n>-<slug>/<repo>.md`, `02_explore/<n>-<slug>/synthesis.md`
 - ADRs: `04_architecture/adr/NNNN-<slug>.md`
@@ -170,6 +176,7 @@ repo, but writes no `.gitattributes` or `.gitkeep`.
 ├── 05_breakdown/         # architect
 ├── 06_publish/           # publisher + sync.md
 ├── references/           # reference files + your own index.md (zumen never edits it)
+├── ideas/                # ideas, one <n>-<slug>/ folder each (summary.md, log.md)
 └── specs/                # per-change artifacts and tickets (<n>-<slug>/)
 ```
 

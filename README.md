@@ -112,8 +112,17 @@ see [Version control](#version-control).
 ├── 05_breakdown/      architect
 ├── 06_publish/        publisher + sync.md
 ├── references/        reference files + your own index.md (zumen never edits it)
+├── ideas/             ideas, one <n>-<slug>/ folder each (summary.md, log.md)
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
+
+## Ideas
+
+Before a change, you can work an idea through in `ideas/`. `zumen idea new "Title"`
+makes a folder with a summary and a log, a facilitator persona works it with you in a
+fixed order, and `zumen idea promote <id> --title <t>` starts a change whose intake is
+the idea's summary. An idea can be promoted more than once to split it, and it can be
+parked or dropped, never deleted. It's optional, and ideas have no gates.
 
 ## Version control
 
