@@ -11,8 +11,6 @@ import (
 	"github.com/btdstudio/zumen/internal/state"
 )
 
-const overviewUsage = "usage: zumen overview [<change>] [--check] [--stdout]"
-
 // runOverview writes or checks specs/<change>/README.md. Exit codes: 0 written
 // or current; 1 an error, or --check found it stale; 2 --check couldn't check.
 func runOverview(root string, args []string) int {
@@ -25,14 +23,14 @@ func runOverview(root string, args []string) int {
 		case a == "--stdout":
 			stdout = true
 		case strings.HasPrefix(a, "-") || change != "":
-			fmt.Fprintln(os.Stderr, overviewUsage)
+			fmt.Fprintln(os.Stderr, usageLine("overview"))
 			return 1
 		default:
 			change = a
 		}
 	}
 	if check && stdout {
-		fmt.Fprintln(os.Stderr, overviewUsage)
+		fmt.Fprintln(os.Stderr, usageLine("overview"))
 		return 1
 	}
 	failed := 1

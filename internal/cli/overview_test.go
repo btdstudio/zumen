@@ -226,7 +226,7 @@ func TestOverviewArguments(t *testing.T) {
 		t.Fatalf("--check unknown = %d, %q", code, stderr)
 	}
 	for _, args := range [][]string{{"--check", "--stdout"}, {"--force"}, {"1-auth-flow", "2-other-work"}} {
-		if code, _, stderr := overviewRun(t, root, args...); code != 1 || !strings.Contains(stderr, overviewUsage) {
+		if code, _, stderr := overviewRun(t, root, args...); code != 1 || !strings.Contains(stderr, usageLine("overview")) {
 			t.Fatalf("%v = %d, %q", args, code, stderr)
 		}
 	}

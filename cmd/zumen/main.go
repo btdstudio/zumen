@@ -19,8 +19,11 @@ func main() {
 }
 
 func run(args []string) int {
+	if code, ok := cli.Help(args, os.Stdout); ok {
+		return code
+	}
 	if len(args) == 0 {
-		cli.PrintUsage()
+		cli.PrintUsage(os.Stderr)
 		return 1
 	}
 	switch args[0] {
@@ -48,9 +51,6 @@ func runInit(args []string) int {
 			noGit = true
 		case a == "--force":
 			force = true
-		case a == "--help" || a == "-h":
-			fmt.Println("usage: zumen init [dir] [--no-git] [--force]  (--no-git: a local workspace, vcs: none)")
-			return 0
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(os.Stderr, "zumen init: unknown flag %s\n", a)
 			return 1
