@@ -3,6 +3,7 @@ package icm
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -452,5 +453,56 @@ func TestUpdateReplacesUneditedAgents(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); string(got) != scaffoldAgents(t) {
 		t.Error("AGENTS.md isn't the current scaffold")
+	}
+}
+
+// AC1, AC9: init creates the references guide, and update adds it to an older
+// workspace without touching any user file or creating the user's index.
+func TestUpdateAddsReferencesWithoutTouchingUserFiles(t *testing.T) {
+	dir := scaffoldWorkspace(t)
+	guide := filepath.Join(dir, "references", "context.md")
+	if _, err := os.Stat(guide); err != nil {
+		t.Fatalf("init didn't create references/context.md: %v", err)
+	}
+	// Make it look like a workspace from before the room existed.
+	if err := os.RemoveAll(filepath.Join(dir, "references")); err != nil {
+		t.Fatal(err)
+	}
+	user := map[string]string{
+		"00_intake/1.md":                "an intake",
+		"specs/1-x/functional-spec.md":  "a spec",
+		"01_research/1-x/notes.md":      "research",
+		"02_explore/1-x/findings.md":    "findings",
+		"04_architecture/adr/0001-x.md": "an adr",
+		"specs/1-x/tickets/S-0001.md":   "a ticket",
+		"specs/1-x/README.md":           "an overview",
+	}
+	for rel, content := range user {
+		p := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rep, err := Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(rep.Updated, "references/context.md") {
+		t.Fatalf("updated = %v, want references/context.md", rep.Updated)
+	}
+	if _, err := os.Stat(guide); err != nil {
+		t.Fatalf("references/context.md wasn't added: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "references", "index.md")); err == nil {
+		t.Error("update created the user's index.md")
+	}
+	for rel, content := range user {
+		got, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil || string(got) != content {
+			t.Errorf("%s changed: %q, %v", rel, got, err)
+		}
 	}
 }

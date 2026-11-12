@@ -91,6 +91,13 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"05_breakdown/templates/ticket.md", "too large to review as one PR"},
 		{"05_breakdown/context.md", "features and epics only where grouping helps"},
 		{"AGENTS.md", "features and epics only where grouping helps"},
+		{"AGENTS.md", "Edits inside zumen's `##` sections are overwritten by `zumen update`"},
+		{"AGENTS.md", "Any phase may also open a file listed in `references/index.md`"},
+		{"references/context.md", "`purpose`, `from` and `added` are required"},
+		{"references/context.md", "`summary` is optional, but required when an agent may not be able to read the format"},
+		{"references/context.md", "start it with `AI chat`"},
+		{"references/context.md", "`index.md` is yours: zumen never creates, edits or overwrites it"},
+		{"references/context.md", "`zumen references check` warns about"},
 		{"06_publish/sync.md", "only for a ticket that has a parent"},
 		{"06_publish/sync-examples/github.md", "needed only when the change has epics or features"},
 		{"06_publish/sync.md", "Its parent (if it has one)"},
@@ -148,4 +155,47 @@ func TestBreakdownWordingIsNotAlwaysEpics(t *testing.T) {
 	if !strings.Contains(files["README.md"], "features and epics only where grouping helps") {
 		t.Error("README.md doesn't say features and epics are only for where grouping helps")
 	}
+}
+
+// AC4: every routing row can read the references index.
+func TestRoutingRowsReadTheReferencesIndex(t *testing.T) {
+	rows := 0
+	inTable := false
+	for _, line := range strings.Split(scaffoldText(t, "AGENTS.md"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "| Task / Intent"):
+			inTable = true
+		case inTable && strings.HasPrefix(line, "|---"):
+		case inTable && strings.HasPrefix(line, "| "):
+			rows++
+			cells := strings.Split(line, "|")
+			if len(cells) != 7 || !strings.Contains(cells[4], "`references/index.md`") {
+				t.Errorf("a routing row's Read column lacks references/index.md: %s", line)
+			}
+		default:
+			inTable = false
+		}
+	}
+	if rows < 8 {
+		t.Errorf("found %d routing rows, want at least 8", rows)
+	}
+}
+
+// N3: the references guide names no third-party tool.
+func TestReferencesGuideNamesNoTools(t *testing.T) {
+	text := strings.ToLower(scaffoldText(t, "references/context.md"))
+	for _, tool := range []string{"obsidian", "notion", "confluence", "chatgpt", "claude", "gemini", "copilot", "slack", "github", "google", "onenote", "evernote"} {
+		if strings.Contains(text, tool) {
+			t.Errorf("references/context.md names %q", tool)
+		}
+	}
+}
+
+func scaffoldText(t *testing.T, rel string) string {
+	t.Helper()
+	data, err := fs.ReadFile(zumen.ScaffoldFS, "scaffold/"+rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }

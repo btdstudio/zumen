@@ -104,6 +104,7 @@ see [Version control](#version-control).
 ├── 04_architecture/   architect + adr/
 ├── 05_breakdown/      architect
 ├── 06_publish/        publisher + sync.md
+├── references/        reference files + your own index.md (zumen never edits it)
 └── specs/             per-change artifacts and tickets (<n>-<slug>/)
 ```
 
