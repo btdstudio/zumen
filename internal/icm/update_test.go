@@ -278,3 +278,179 @@ func TestSyncFileEditsSurviveUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// editAgents is the scaffold's AGENTS.md with the Tech stack section filled in,
+// a section of the user's own added, and one zumen section gone stale.
+func editAgents(t *testing.T, text string) string {
+	t.Helper()
+	doc := parseAgents(text)
+	var b strings.Builder
+	b.WriteString(strings.Join(doc.preamble, "\n") + "\n")
+	for _, sec := range doc.sections {
+		switch sec.heading {
+		case "Tech stack & standards":
+			b.WriteString("## Tech stack & standards\n\n- Go 1.22, Postgres\n\n")
+		case "Handoff":
+			b.WriteString("## Handoff\n\nstale handoff text\n\n")
+		default:
+			b.WriteString(strings.Join(sec.body, "\n") + "\n\n")
+		}
+	}
+	b.WriteString("## Team notes\n\nkeep me\n")
+	return b.String()
+}
+
+func headings(text string) []string {
+	var out []string
+	for _, sec := range parseAgents(text).sections {
+		out = append(out, sec.heading)
+	}
+	return out
+}
+
+// AC5, AC7: an edited AGENTS.md gets zumen's sections back, and a second update
+// changes nothing.
+func TestUpdateMergesEditedAgents(t *testing.T) {
+	dir := scaffoldWorkspace(t)
+	path := filepath.Join(dir, "AGENTS.md")
+	real := scaffoldAgents(t)
+	if err := os.WriteFile(path, []byte(editAgents(t, real)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Merged) != 1 || rep.Merged[0] != "AGENTS.md" || len(rep.Skipped) != 0 || len(rep.NotMerged) != 0 {
+		t.Fatalf("rep = %+v, want AGENTS.md merged and nothing skipped", rep)
+	}
+	got, _ := os.ReadFile(path)
+	text := string(got)
+	if strings.Contains(text, "stale handoff text") {
+		t.Error("a zumen section wasn't refreshed")
+	}
+	for _, keep := range []string{"- Go 1.22, Postgres", "## Team notes\n\nkeep me\n"} {
+		if !strings.Contains(text, keep) {
+			t.Errorf("lost the user's %q", keep)
+		}
+	}
+	if !strings.HasPrefix(text, strings.Join(parseAgents(real).preamble, "\n")) {
+		t.Error("the title and intro changed")
+	}
+
+	rep, err = Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Merged) != 0 || len(rep.Skipped) != 0 || !strings.Contains(strings.Join(rep.Unchanged, " "), "AGENTS.md") {
+		t.Fatalf("second update rep = %+v, want AGENTS.md unchanged", rep)
+	}
+	if again, _ := os.ReadFile(path); string(again) != text {
+		t.Error("the second update changed AGENTS.md")
+	}
+}
+
+// AC5: a workspace whose AGENTS.md came from v0.7.0 or v0.8.0 and was edited.
+func TestUpdateMergesFromOlderScaffold(t *testing.T) {
+	real := scaffoldAgents(t)
+	for _, version := range []string{"v0.7.0", "v0.8.0"} {
+		fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "agents", version+"-AGENTS.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := scaffoldWorkspace(t)
+		path := filepath.Join(dir, "AGENTS.md")
+		if err := os.WriteFile(path, []byte(editAgents(t, string(fixture))), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		rep, err := Update(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Merged) != 1 || len(rep.Skipped) != 0 {
+			t.Fatalf("%s: rep = %+v", version, rep)
+		}
+		got, _ := os.ReadFile(path)
+		merged, want := parseAgents(string(got)), parseAgents(real)
+		wantBy := map[string]string{}
+		for _, sec := range want.sections {
+			wantBy[sec.heading] = strings.Join(sec.body, "\n")
+		}
+		for _, sec := range merged.sections {
+			text := strings.Join(sec.body, "\n")
+			switch sec.heading {
+			case "Tech stack & standards":
+				if !strings.Contains(text, "Go 1.22, Postgres") {
+					t.Errorf("%s: Tech stack lost", version)
+				}
+			case "Team notes":
+				if !strings.Contains(text, "keep me") {
+					t.Errorf("%s: Team notes lost", version)
+				}
+			default:
+				if text != wantBy[sec.heading] {
+					t.Errorf("%s: %q doesn't match the current scaffold", version, sec.heading)
+				}
+			}
+		}
+		if want := append(headings(real), "Team notes"); len(headings(string(got))) != len(want) {
+			t.Errorf("%s: headings = %v, want %d sections", version, headings(string(got)), len(want))
+		}
+	}
+}
+
+// AC6: a file that can't be merged is left alone, and the report says why.
+func TestUpdateRefusesUnmergeableAgents(t *testing.T) {
+	real := scaffoldAgents(t)
+	for _, tc := range []struct{ name, content, reason string }{
+		{"no ## headings", "mine", "no ## headings"},
+		{"a duplicated zumen heading", real + "\n## Handoff\n\nagain\n", `duplicated heading "Handoff"`},
+	} {
+		dir := scaffoldWorkspace(t)
+		path := filepath.Join(dir, "AGENTS.md")
+		if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		rep, err := Update(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(rep.Skipped) != 1 || rep.Skipped[0] != "AGENTS.md" || rep.NotMerged["AGENTS.md"] != tc.reason || len(rep.Merged) != 0 {
+			t.Errorf("%s: rep = %+v, want AGENTS.md skipped with %q", tc.name, rep, tc.reason)
+		}
+		if got, _ := os.ReadFile(path); string(got) != tc.content {
+			t.Errorf("%s: the file changed", tc.name)
+		}
+	}
+}
+
+// AC8: a file that's still the previous scaffold is replaced as before, not merged.
+func TestUpdateReplacesUneditedAgents(t *testing.T) {
+	dir := scaffoldWorkspace(t)
+	path := filepath.Join(dir, "AGENTS.md")
+	old, err := os.ReadFile(filepath.Join("..", "..", "testdata", "agents", "v0.7.0-AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ReadManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Files["AGENTS.md"] = hashBytes(old)
+	if err := WriteManifest(dir, m); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := Update(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Merged) != 0 || len(rep.Updated) != 1 || rep.Updated[0] != "AGENTS.md" {
+		t.Fatalf("rep = %+v, want AGENTS.md updated, not merged", rep)
+	}
+	if got, _ := os.ReadFile(path); string(got) != scaffoldAgents(t) {
+		t.Error("AGENTS.md isn't the current scaffold")
+	}
+}

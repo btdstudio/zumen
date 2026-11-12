@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/btdstudio/kiso/scaffold"
@@ -22,11 +23,18 @@ import (
 const WorkspaceDir = ".zumen"
 
 type (
-	Manifest     = scaffold.Manifest
-	Options      = scaffold.Options
-	Report       = scaffold.Report
-	UpdateReport = scaffold.UpdateReport
+	Manifest = scaffold.Manifest
+	Options  = scaffold.Options
+	Report   = scaffold.Report
 )
+
+// UpdateReport is kiso's report, plus what zumen did to AGENTS.md. A merged file
+// leaves Skipped, because kiso skipped it as edited and zumen then handled it.
+type UpdateReport struct {
+	scaffold.UpdateReport
+	Merged    []string          // files whose zumen-owned sections were merged in
+	NotMerged map[string]string // files zumen couldn't merge, and why; they stay in Skipped
+}
 
 var engine = scaffold.Engine{
 	Tool:   "zumen",
@@ -75,7 +83,8 @@ func Scaffold(dir string, opts Options, vcs string) (Report, error) {
 
 // Update moves v1 rooms to their v2 names, then refreshes managed files under the
 // workspace's "vcs" setting; see scaffold.Engine.Update. An invalid setting fails
-// before anything moves.
+// before anything moves. An AGENTS.md that kiso skipped as edited gets zumen's
+// sections merged into it; see MergeAgents.
 func Update(dir string) (UpdateReport, error) {
 	loaded, err := settings.LoadSettings(dir)
 	if err != nil {
@@ -86,7 +95,55 @@ func Update(dir string) (UpdateReport, error) {
 	}
 	e := engine
 	e.VCS = loaded.VCS
-	return e.Update(dir)
+	kiso, err := e.Update(dir)
+	rep := UpdateReport{UpdateReport: kiso}
+	if err != nil {
+		return rep, err
+	}
+	return rep, mergeAgentsFile(dir, &rep)
+}
+
+const agentsFile = "AGENTS.md"
+
+// mergeAgentsFile merges the scaffold's AGENTS.md into the user's when kiso
+// skipped it. A file that can't be merged is left alone and stays in Skipped. A
+// merge that changes nothing counts as unchanged.
+func mergeAgentsFile(dir string, rep *UpdateReport) error {
+	i := slices.Index(rep.Skipped, agentsFile)
+	if i < 0 {
+		return nil
+	}
+	path := filepath.Join(dir, agentsFile)
+	user, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	scaffoldText, err := fs.ReadFile(engine.FS, agentsFile)
+	if err != nil {
+		return err
+	}
+	merged, reason := MergeAgents(string(user), string(scaffoldText))
+	if reason != "" {
+		if rep.NotMerged == nil {
+			rep.NotMerged = map[string]string{}
+		}
+		rep.NotMerged[agentsFile] = reason
+		return nil
+	}
+	rep.Skipped = slices.Delete(rep.Skipped, i, i+1)
+	if merged == string(user) {
+		rep.Unchanged = append(rep.Unchanged, agentsFile)
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, []byte(merged), info.Mode().Perm()); err != nil {
+		return err
+	}
+	rep.Merged = append(rep.Merged, agentsFile)
+	return nil
 }
 
 // renamedRooms maps v1 room folders to their v2 names, in an order where a new name
