@@ -318,6 +318,9 @@ func TestUpdateMergesEditedAgents(t *testing.T) {
 	if err := os.WriteFile(path, []byte(editAgents(t, real)), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
 	rep, err := Update(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -337,6 +340,9 @@ func TestUpdateMergesEditedAgents(t *testing.T) {
 	}
 	if !strings.HasPrefix(text, strings.Join(parseAgents(real).preamble, "\n")) {
 		t.Error("the title and intro changed")
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o640 {
+		t.Errorf("AGENTS.md mode = %v, %v; want the user's 0640 kept", info.Mode().Perm(), err)
 	}
 
 	rep, err = Update(dir)

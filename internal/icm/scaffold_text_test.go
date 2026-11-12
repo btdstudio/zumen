@@ -93,6 +93,7 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"AGENTS.md", "features and epics only where grouping helps"},
 		{"AGENTS.md", "Edits inside zumen's `##` sections are overwritten by `zumen update`"},
 		{"AGENTS.md", "Any phase may also open a file listed in `references/index.md`"},
+		{"AGENTS.md", "references/ # reference files + your own index.md (zumen never edits it)"},
 		{"references/context.md", "`purpose`, `from` and `added` are required"},
 		{"references/context.md", "`summary` is optional, but required when an agent may not be able to read the format"},
 		{"references/context.md", "start it with `AI chat`"},
@@ -198,4 +199,24 @@ func scaffoldText(t *testing.T, rel string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+// AC10: the README's workspace tree lists the references room.
+func TestReadmeListsTheReferencesRoom(t *testing.T) {
+	readme, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(string(readme)), " ")
+	for _, want := range []string{
+		"references/ reference files + your own index.md (zumen never edits it)",
+		"`zumen references check`",
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("README.md lacks %q", want)
+		}
+	}
+	if strings.Contains(strings.ToLower(flat), "ideas") {
+		t.Error("README.md mentions ideas, which belong to a later story")
+	}
 }
