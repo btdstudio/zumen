@@ -5,7 +5,8 @@ A starter for `06_publish/sync.md`. Copy it there, then fill in the settings.
 ## Settings
 
 - **Tool name:** `github`, used as `external.github`.
-- **Planning repo:** `<owner>/<repo>`, for epics and features, which have no `repo`.
+- **Planning repo:** `<owner>/<repo>`, needed only when the change has epics or features,
+  which have no `repo`. A flat breakdown has none, so it needs no planning repo.
 - **Stories and tasks** go in their own repo: run `zumen repo list` and turn the
   ticket's `repo` into `<owner>/<repo>`.
 - **External id:** `<owner>/<repo>#<number>`.
@@ -34,7 +35,7 @@ For each ticket in `zumen tickets order` sequence:
 | The ticket | Do |
 |---|---|
 | `status: draft` | Skip it. |
-| Its parent, a `depends_on` ticket or its `supersedes` target has no `external.github` | Don't create or update it. Report it as **blocked**, naming that ticket. |
+| Its parent (if it has one), a `depends_on` ticket or its `supersedes` target has no `external.github` | Don't create or update it. Report it as **blocked**, naming that ticket. |
 | No `external.github` | Create it, as below. |
 | Has the id, and no `published_hash` | Update it, as below, then re-freeze with `mark-published`. |
 | Has the id and a `published_hash` | Skip it. |
@@ -69,8 +70,9 @@ gh issue view <number> --repo <owner>/<repo> --json title,body,state,labels,comm
 
 ## link
 
-**Parent/child.** Sub-issues take the child's database id, not its number. They work
-across repos in the same owner, and an issue can have only one parent:
+**Parent/child.** Only for a ticket that has a parent. Sub-issues take the child's
+database id, not its number. They work across repos in the same owner, and an issue
+can have only one parent:
 
 ```bash
 child_id=$(gh api repos/<owner>/<child-repo>/issues/<child-number> --jq .id)

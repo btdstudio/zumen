@@ -27,7 +27,8 @@ synthesis when there are fewer than two.
 - **architecture** (architect) — the smallest solution: decisions with rationale and
   rejected alternatives, component map, interfaces, data flow. Record durable
   decisions as ADRs under `04_architecture/adr/`.
-- **breakdown** (architect) — epics, features, stories and tasks as ticket files.
+- **breakdown** (architect) — stories and tasks as ticket files, each one repo's work
+  in one reviewable PR; features and epics only where grouping helps.
 - **publish** (publisher) — sync tickets to a PM tool, then freeze them. A run phase.
 
 Each phase writes its artifact and stops at a gate for human approval.

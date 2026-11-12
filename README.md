@@ -67,7 +67,7 @@ A change is an initiative, often across many repos, and ends in tickets:
 4. **synthesis** (architect) *(skippable)* — what the findings add up to.
 5. **spec** (analyst) — system-level requirements.
 6. **architecture** (architect) — the smallest solution + ADRs.
-7. **breakdown** (architect) — epics, features, stories and tasks as ticket files.
+7. **breakdown** (architect) — stories and tasks as ticket files, with features and epics only where grouping helps.
 8. **publish** (publisher) — sync tickets to a PM tool, then freeze them.
 
 Each phase stops at a gate for your approval. With the default `gates: block`
