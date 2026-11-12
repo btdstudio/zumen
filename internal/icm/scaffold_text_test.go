@@ -99,6 +99,7 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"references/context.md", "start it with `AI chat`"},
 		{"references/context.md", "`index.md` is yours: zumen never creates, edits or overwrites it"},
 		{"references/context.md", "`zumen references check` warns about"},
+		{"references/context.md", "A folder isn't an entry: list each file in it separately"},
 		{"06_publish/sync.md", "only for a ticket that has a parent"},
 		{"06_publish/sync-examples/github.md", "needed only when the change has epics or features"},
 		{"06_publish/sync.md", "Its parent (if it has one)"},

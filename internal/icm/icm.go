@@ -95,8 +95,8 @@ func Update(dir string) (UpdateReport, error) {
 	}
 	e := engine
 	e.VCS = loaded.VCS
-	kiso, err := e.Update(dir)
-	rep := UpdateReport{UpdateReport: kiso}
+	base, err := e.Update(dir)
+	rep := UpdateReport{UpdateReport: base}
 	if err != nil {
 		return rep, err
 	}
@@ -135,11 +135,8 @@ func mergeAgentsFile(dir string, rep *UpdateReport) error {
 		rep.Unchanged = append(rep.Unchanged, agentsFile)
 		return nil
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, []byte(merged), info.Mode().Perm()); err != nil {
+	// The file exists, so WriteFile keeps its mode; 0o644 only applies to a new file.
+	if err := os.WriteFile(path, []byte(merged), 0o644); err != nil {
 		return err
 	}
 	rep.Merged = append(rep.Merged, agentsFile)

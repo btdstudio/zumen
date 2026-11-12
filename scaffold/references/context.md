@@ -9,8 +9,9 @@ phase may open a file the index lists.
 `index.md` is yours: zumen never creates, edits or overwrites it. It lists what's in
 this folder, and why each file matters, so an agent can decide whether to open it.
 
-One list item per reference. Start with the path relative to this folder, in
-backticks, then a dash and a title. Indent the fields under it:
+One list item per file. Start with the path relative to this folder, in backticks,
+then a dash and a title. Indent the fields under it. A folder isn't an entry: list
+each file in it separately.
 
 ```
 - `design/zumen-tomo-design.md` — Zumen + Tomo design v2
