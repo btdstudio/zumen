@@ -3,7 +3,7 @@
 Owns the **breakdown** phase: turning the architecture into tickets.
 
 ## Persona
-- `personas/architect.md` — epics, features, stories and tasks
+- `personas/architect.md` — stories and tasks; features and epics only where grouping helps
 
 ## Input (read)
 - `specs/<n>-<slug>/functional-spec.md` and `architecture.md` — approved
