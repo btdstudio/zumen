@@ -332,6 +332,16 @@ func Reopen(root string, id int, reason, today string) (Idea, error) {
 		status: Open, reason: "", log: "reopened: " + reason})
 }
 
+// CanPromote reports whether the idea can be promoted: it has to be open, or
+// already promoted, which is how an idea is split. A parked or dropped idea has to
+// be reopened first. Promotion checks this before it creates a change.
+func (i Idea) CanPromote() error {
+	if i.Status == Open || i.Status == Promoted {
+		return nil
+	}
+	return fmt.Errorf("zumen: idea %d is %s: reopen it first", i.ID, i.Status)
+}
+
 // MarkPromoted records that a change was promoted from the idea. It needs an open
 // or already promoted idea, and adds the change to the idea's changes.
 func MarkPromoted(root string, id int, changeName, today string) (Idea, error) {
@@ -345,9 +355,7 @@ func MarkPromoted(root string, id int, changeName, today string) (Idea, error) {
 	}
 	changes := append(slices.Clone(i.Changes), changeName)
 	return apply(root, id, today, change{from: []string{Open, Promoted},
-		refuse: func(i Idea) error {
-			return fmt.Errorf("zumen: idea %d is %s: reopen it first", i.ID, i.Status)
-		},
+		refuse: func(i Idea) error { return i.CanPromote() },
 		status: Promoted, reason: "", extra: []kv{{"changes", strings.Join(changes, ", ")}},
 		log: "promoted to " + changeName})
 }

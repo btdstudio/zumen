@@ -217,7 +217,4 @@ func TestReadmeListsTheReferencesRoom(t *testing.T) {
 			t.Errorf("README.md lacks %q", want)
 		}
 	}
-	if strings.Contains(strings.ToLower(flat), "ideas") {
-		t.Error("README.md mentions ideas, which belong to a later story")
-	}
 }

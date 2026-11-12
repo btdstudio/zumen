@@ -50,6 +50,7 @@ var handlers = map[string]func(root string, args []string) int{
 	"reopen":     runReopen,
 	"tickets":    runTickets,
 	"overview":   runOverview,
+	"idea":       runIdea,
 	"references": runReferences,
 	"repo": func(root string, args []string) int {
 		return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)

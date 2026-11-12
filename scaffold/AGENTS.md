@@ -63,6 +63,13 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check `specs/<change>/README.md`: the narrative region is yours, the generated region is rewritten; `--check` exits 1 if it's out of date |
+| `zumen idea new <title>` | create an idea in `ideas/`, from the summary template |
+| `zumen idea list` | list ideas with their status, and the reason for a parked or dropped one |
+| `zumen idea show <id>` | print an idea's summary and status |
+| `zumen idea park <id> --reason <r>` | set an open idea aside, with a reason |
+| `zumen idea drop <id> --reason <r>` | drop an open idea, with a reason; its folder stays |
+| `zumen idea reopen <id> --reason <r>` | reopen a parked or dropped idea, with a reason |
+| `zumen idea promote <id> --title <t> [--repo <name\|path>]... [--rev <r>]` | start a change from an idea: its intake is the idea's summary, and an idea can be promoted more than once |
 | `zumen references check` | warn about unindexed files in `references/` and index entries that lack a file or a field |
 | `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
 | `zumen repo list` | list repos and their local paths |
