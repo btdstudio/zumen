@@ -72,7 +72,7 @@ func TestScaffoldGuidanceText(t *testing.T) {
 		{"05_breakdown/personas/architect.md", "cites the requirements it satisfies"},
 		{"03_spec/personas/analyst.md", "on one line"},
 		{"03_spec/templates/functional-spec.md", "all on one line"},
-		{"AGENTS.md", "`zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--requirements <id,...>]`"},
+		{"AGENTS.md", "`zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>]`"},
 	} {
 		data, err := fs.ReadFile(zumen.ScaffoldFS, "scaffold/"+tc.file)
 		if err != nil {

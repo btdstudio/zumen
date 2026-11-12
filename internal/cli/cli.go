@@ -20,77 +20,39 @@ import (
 
 // Run dispatches a helper subcommand and returns a process exit code.
 func Run(args []string) int {
+	if code, ok := Help(args, os.Stdout); ok {
+		return code
+	}
 	if len(args) == 0 {
-		PrintUsage()
+		PrintUsage(os.Stderr)
 		return 1
 	}
-	root := "."
-	switch args[0] {
-	case "help", "-h", "--help":
-		PrintUsage()
-		return 0
-	case "status":
-		return runStatus(root)
-	case "settings":
-		return runSettings(root)
-	case "switch":
-		return runSwitch(root, args[1:])
-	case "source":
-		return runSource(root, args[1:])
-	case "adr":
-		return runAdr(root, args[1:])
-	case "change":
-		return runChange(root, args[1:])
-	case "gate":
-		return runGate(root, args[1:])
-	case "reopen":
-		return runReopen(root, args[1:])
-	case "tickets":
-		return runTickets(root, args[1:])
-	case "overview":
-		return runOverview(root, args[1:])
-	case "repo":
-		return repos.Run(root, "zumen", args[1:], os.Stdout, os.Stderr)
-	case "env":
-		return runEnv(root)
-	default:
+	run, ok := handlers[args[0]]
+	if !ok {
 		fmt.Fprintf(os.Stderr, "zumen: unknown command %q\n", args[0])
-		PrintUsage()
+		PrintUsage(os.Stderr)
 		return 1
 	}
+	return run(".", args[1:])
 }
 
-// PrintUsage prints the zumen usage summary.
-func PrintUsage() {
-	fmt.Print(`zumen — folder-driven planning workspace
-
-Usage:
-  zumen init [dir] [--no-git] [--force]   scaffold the planning ICM structure (--no-git: local, vcs: none)
-  zumen update                             refresh managed files
-  zumen status                             show the active change
-  zumen settings                           show effective settings
-  zumen switch [--all] [<change>]          list changes, or switch the active one
-  zumen source new|list|show [args]        manage 00_intake/
-  zumen adr new|list|show [args]           manage 04_architecture/adr/
-  zumen change new <title> [--repo <name>]...
-                                           create a change + intake + switch
-  zumen change close <change> --reason <r> close a change
-  zumen gate <phase> <status> [--reason <r>] [--force]
-                                           advance the active change's gate
-  zumen reopen <phase> --reason <r>        move back to a phase, clearing later approvals
-  zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>]
-                                           create a ticket in the active change
-  zumen tickets check|status|order         validate, list and order tickets
-  zumen tickets mark-published <id> --external <tool>=<item-id>
-                                           record a PM tool's id and freeze the ticket
-  zumen tickets unfreeze <id> --reason <r> clear a ticket's freeze
-  zumen overview [<change>] [--check] [--stdout]
-                                           write or check the change's README overview
-` + repos.Usage("zumen") + `  zumen env                                print harness flags for the active change's repos
-  zumen check                              validate the embedded scaffold
-  zumen version                            print the version
-  zumen help                               this help
-`)
+// handlers are the commands Run dispatches; main dispatches init, update, check
+// and version itself.
+var handlers = map[string]func(root string, args []string) int{
+	"status":   func(root string, _ []string) int { return runStatus(root) },
+	"settings": func(root string, _ []string) int { return runSettings(root) },
+	"switch":   runSwitch,
+	"source":   runSource,
+	"adr":      runAdr,
+	"change":   runChange,
+	"gate":     runGate,
+	"reopen":   runReopen,
+	"tickets":  runTickets,
+	"overview": runOverview,
+	"repo": func(root string, args []string) int {
+		return repos.Run(root, "zumen", args, os.Stdout, os.Stderr)
+	},
+	"env": func(root string, _ []string) int { return runEnv(root) },
 }
 
 func runStatus(root string) int {
@@ -223,7 +185,7 @@ func runChange(root string, args []string) int {
 		return runChangeClose(root, args[1:])
 	}
 	if len(args) == 0 || args[0] != "new" {
-		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <name|path>]... [--rev <r>] [--body <b>]\n       zumen change close <change> --reason <r>")
+		fmt.Fprint(os.Stderr, usageText("change"))
 		return 1
 	}
 	args = args[1:]
@@ -251,7 +213,7 @@ func runChange(root string, args []string) int {
 		}
 	}
 	if title == "" {
-		fmt.Fprintln(os.Stderr, "usage: zumen change new <title> [--repo <name|path>]... [--rev <r>] [--body <b>]")
+		fmt.Fprintln(os.Stderr, usageLine("change", "new"))
 		return 1
 	}
 	registered, err := changeRepos(root, repoArgs)
@@ -340,7 +302,7 @@ func runEnv(root string) int {
 func runChangeClose(root string, args []string) int {
 	pos, reason, _, err := parseTransition(args)
 	if err != nil || len(pos) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: zumen change close <change> --reason <r>")
+		fmt.Fprintln(os.Stderr, usageLine("change", "close"))
 		return 1
 	}
 	st, err := state.CloseChange(root, pos[0], reason)
@@ -371,7 +333,7 @@ func parseTransition(args []string) (pos []string, reason string, force bool, er
 }
 
 func runGate(root string, args []string) int {
-	usage := "usage: zumen gate <phase> <status> [--reason <r>] [--force]"
+	usage := usageLine("gate")
 	pos, reason, force, err := parseTransition(args)
 	if err != nil || len(pos) != 2 {
 		fmt.Fprintln(os.Stderr, usage)
@@ -424,7 +386,7 @@ func runGate(root string, args []string) int {
 func runReopen(root string, args []string) int {
 	pos, reason, _, err := parseTransition(args)
 	if err != nil || len(pos) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: zumen reopen <phase> --reason <r>")
+		fmt.Fprintln(os.Stderr, usageLine("reopen"))
 		return 1
 	}
 	st, err := state.Reopen(root, pos[0], reason)
@@ -458,7 +420,7 @@ func runSource(root string, args []string) int {
 		return 0
 	case "show":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: zumen source show <id>")
+			fmt.Fprintln(os.Stderr, usageLine("source", "show"))
 			return 1
 		}
 		id, err := strconv.Atoi(args[1])
@@ -493,13 +455,16 @@ func runSource(root string, args []string) int {
 			case a == "--body" && i+1 < len(args):
 				i++
 				body = args[i]
+			case strings.HasPrefix(a, "-"):
+				fmt.Fprintf(os.Stderr, "zumen source new: unknown flag %q, or it needs a value (see zumen source new --help)\n", a)
+				return 1
 			default:
-				fmt.Fprintf(os.Stderr, "zumen source new: unexpected argument %q (quote multi-word values)\n", a)
+				fmt.Fprintf(os.Stderr, "zumen source new: unexpected argument %q (use --title <t>; see zumen source new --help)\n", a)
 				return 1
 			}
 		}
 		if title == "" {
-			fmt.Fprintln(os.Stderr, "usage: zumen source new --title <t> [--repo <path>] [--rev <r>] [--body <b>]")
+			fmt.Fprintln(os.Stderr, usageLine("source", "new"))
 			return 1
 		}
 		src := source.SOURCE_ISSUE
@@ -515,6 +480,7 @@ func runSource(root string, args []string) int {
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "zumen source: unknown verb %q\n", args[0])
+		fmt.Fprint(os.Stderr, usageText("source"))
 		return 1
 	}
 }
@@ -537,7 +503,7 @@ func runAdr(root string, args []string) int {
 		return 0
 	case "show":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: zumen adr show <number>")
+			fmt.Fprintln(os.Stderr, usageLine("adr", "show"))
 			return 1
 		}
 		n, err := strconv.Atoi(args[1])
@@ -574,13 +540,16 @@ func runAdr(root string, args []string) int {
 			case a == "--file" && i+1 < len(args):
 				i++
 				file = args[i]
+			case strings.HasPrefix(a, "-"):
+				fmt.Fprintf(os.Stderr, "zumen adr new: unknown flag %q, or it needs a value (see zumen adr new --help)\n", a)
+				return 1
 			default:
-				fmt.Fprintf(os.Stderr, "zumen adr new: unexpected argument %q (quote multi-word values)\n", a)
+				fmt.Fprintf(os.Stderr, "zumen adr new: unexpected argument %q (use --title <t>; see zumen adr new --help)\n", a)
 				return 1
 			}
 		}
 		if title == "" {
-			fmt.Fprintln(os.Stderr, "usage: zumen adr new --title <t> [--deciders <d>] [--context <c>] [--decision <d>] [--consequences <c>] [--file <path>]")
+			fmt.Fprintln(os.Stderr, usageLine("adr", "new"))
 			return 1
 		}
 		opts := adr.Options{Title: title, Deciders: deciders, Context: context, Decision: decision, Consequences: consequences}
@@ -601,6 +570,7 @@ func runAdr(root string, args []string) int {
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "zumen adr: unknown verb %q\n", args[0])
+		fmt.Fprint(os.Stderr, usageText("adr"))
 		return 1
 	}
 }

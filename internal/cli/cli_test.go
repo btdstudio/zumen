@@ -139,11 +139,46 @@ func TestChangeNewLeavesNothingBehindOnCorruptState(t *testing.T) {
 
 func TestSourceAndAdrNewRejectStrayArguments(t *testing.T) {
 	root := workspace(t)
-	if code := runSource(root, []string{"new", "--title", "Auth", "flow"}); code != 1 {
-		t.Fatalf("source new = %d, want 1", code)
+	for _, run := range []struct {
+		name string
+		fn   func() int
+	}{
+		{"source new", func() int { return runSource(root, []string{"new", "--title", "Auth", "flow"}) }},
+		{"source new", func() int { return runSource(root, []string{"new", "Auth flow"}) }},
+		{"adr new", func() int { return runAdr(root, []string{"new", "--title", "Use", "JWT"}) }},
+		{"adr new", func() int { return runAdr(root, []string{"new", "Use JWT"}) }},
+	} {
+		code, stderr := captureStderr(t, run.fn)
+		if code != 1 {
+			t.Fatalf("%s = %d, want 1", run.name, code)
+		}
+		if !strings.Contains(stderr, "--title") || strings.Contains(stderr, "quote") {
+			t.Fatalf("%s error should name --title, not quoting: %q", run.name, stderr)
+		}
 	}
-	if code := runAdr(root, []string{"new", "--title", "Use", "JWT"}); code != 1 {
-		t.Fatalf("adr new = %d, want 1", code)
+}
+
+// A mistyped flag, or a flag with no value, is reported as a flag problem, not
+// with --title advice.
+func TestSourceAndAdrNewReportFlagProblems(t *testing.T) {
+	root := workspace(t)
+	for _, tc := range []struct {
+		args []string
+		bad  string
+		fn   func(string, []string) int
+	}{
+		{[]string{"new", "--title", "X", "--decider", "bob"}, "--decider", runAdr},
+		{[]string{"new", "--title"}, "--title", runAdr},
+		{[]string{"new", "--tittle", "X"}, "--tittle", runSource},
+		{[]string{"new", "--title", "X", "--body"}, "--body", runSource},
+	} {
+		code, stderr := captureStderr(t, func() int { return tc.fn(root, tc.args) })
+		if code != 1 {
+			t.Fatalf("%q = %d, want 1", tc.args, code)
+		}
+		if !strings.Contains(stderr, "unknown flag \""+tc.bad+"\"") || strings.Contains(stderr, "use --title") {
+			t.Fatalf("%q error = %q, want an unknown-flag error for %s", tc.args, stderr, tc.bad)
+		}
 	}
 }
 

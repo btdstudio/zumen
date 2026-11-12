@@ -36,17 +36,22 @@ Each phase writes its artifact and stops at a gate for human approval.
 
 | Command | Purpose |
 |---|---|
-| `zumen init [dir]` | scaffold this planning ICM structure |
+| `zumen init [dir] [--no-git] [--force]` | scaffold this planning ICM structure (`--no-git`: a local workspace, vcs: none; `--force`: overwrite existing files) |
 | `zumen update` | refresh managed files to the installed version |
 | `zumen status` | show the active change's phase/status |
+| `zumen settings` | show/merge settings |
 | `zumen switch [--all] [<change>]` | list changes (`--all` includes closed ones), or switch the active change |
-| `zumen source new\|list\|show` | manage `00_intake/` |
-| `zumen adr new\|list\|show` | manage `04_architecture/adr/` |
-| `zumen change new <title> [--repo <name>]...` | create a change + intake + switch |
+| `zumen source new --title <t> [--repo <path>] [--rev <r>] [--body <b>]` | add an intake source to `00_intake/` |
+| `zumen source list` | list intake sources |
+| `zumen source show <id>` | show an intake source |
+| `zumen adr new --title <t> [--deciders <d>] [--context <c>] [--decision <d>] [--consequences <c>] [--file <path>]` | create an ADR in `04_architecture/adr/` (`--file` reads the body from a file) |
+| `zumen adr list` | list ADRs |
+| `zumen adr show <number>` | show an ADR |
+| `zumen change new <title> [--repo <name\|path>]... [--rev <r>] [--body <b>]` | create a change + intake + switch |
 | `zumen change close <change> --reason <r>` | close a change |
 | `zumen gate <phase> <status> [--reason <r>] [--force]` | advance the active change's gate (earlier phases must be approved or skipped); `skipped` needs a reason |
 | `zumen reopen <phase> --reason <r>` | move back to a phase and clear later approvals |
-| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--requirements <id,...>]` | create a ticket in the active change, citing the spec's requirements |
+| `zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>]` | create a ticket in the active change, citing the spec's requirements |
 | `zumen tickets check` | validate every ticket: schema, parents, cycles, repos, readiness, drift. Errors (`✗`) exit 1; warnings (`!`) don't |
 | `zumen tickets status` | list tickets by draft, ready, published and drifted |
 | `zumen tickets order` | list tickets in publish order |
@@ -54,10 +59,14 @@ Each phase writes its artifact and stops at a gate for human approval.
 | `zumen tickets mark-published <id> --external <tool>=<item-id> [--force]` | record a PM tool's id and freeze the ticket; needs publish in-progress (`--force` overrides only that), a valid ready mark, and published predecessors |
 | `zumen tickets unfreeze <id> --reason <r>` | clear a ticket's freeze, so the next sync updates it |
 | `zumen overview [<change>] [--check] [--stdout]` | write or check `specs/<change>/README.md`: the narrative region is yours, the generated region is rewritten; `--check` exits 1 if it's out of date |
-| `zumen repo add\|list\|path\|doctor` | manage the repos this workspace works with |
+| `zumen repo add <name> <remote> [--path <p>] [--branch <b>]` | register a repo this workspace works with |
+| `zumen repo list` | list repos and their local paths |
+| `zumen repo path <name> <path>` | set a repo's local path |
+| `zumen repo doctor [--clone] [--into <dir>]` | check repos; `--clone` fetches missing ones |
 | `zumen env` | print harness flags (`--add-dir <path>`) for the active change's repos |
-| `zumen settings` | show/merge settings |
-| `zumen help` | usage |
+| `zumen check` | validate the embedded scaffold |
+| `zumen version` | print the version |
+| `zumen help [<command> [<verb>]]` | usage; `zumen <command> --help` (or `-h`) prints one command's usage |
 
 The folders/personas below describe *what* to do; `zumen` is a plain CLI — run
 it like `git` or `gh`. Prefer `zumen <command>` over hand-editing `STATE.json` or

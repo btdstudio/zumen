@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -16,19 +17,9 @@ import (
 	"github.com/btdstudio/zumen/internal/state"
 )
 
-const ticketsUsage = `usage:
-  zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>]
-  zumen tickets check
-  zumen tickets status
-  zumen tickets order
-  zumen tickets ready <id>... | --all [--force]
-  zumen tickets mark-published <id> --external <tool>=<item-id> [--force]
-  zumen tickets unfreeze <id> --reason <r>
-`
-
 func runTickets(root string, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, ticketsUsage)
+		fmt.Fprint(os.Stderr, usageText("tickets"))
 		return 1
 	}
 	var code int
@@ -49,7 +40,7 @@ func runTickets(root string, args []string) int {
 	case "unfreeze":
 		code, err = ticketsUnfreeze(root, args[1:])
 	default:
-		fmt.Fprint(os.Stderr, ticketsUsage)
+		fmt.Fprint(os.Stderr, usageText("tickets"))
 		return 1
 	}
 	if err != nil {
@@ -120,7 +111,7 @@ func ticketsNew(root string, args []string) (int, error) {
 		}
 	}
 	if len(pos) != 2 {
-		return 0, fmt.Errorf("usage: zumen tickets new <type> <title> [--parent <id>] [--repo <name>] [--depends <id,id>] [--requirements <id,id>] (quote a multi-word title)")
+		return 0, errors.New(usageLine("tickets", "new") + " (quote a multi-word title)")
 	}
 	f.Type, f.Title = pos[0], pos[1]
 	st, err := state.LoadState(root)
@@ -421,8 +412,6 @@ func refreshOverviews(root string, changes ...string) []string {
 	return written
 }
 
-const readyUsage = "usage: zumen tickets ready <id>... | --all [--force]"
-
 // ticketsReady readies tickets once their change has breakdown approved. It's
 // all-or-nothing: it checks readied copies of every target first, and writes them
 // only when none has a problem.
@@ -442,7 +431,7 @@ func ticketsReady(root string, args []string) (int, error) {
 		}
 	}
 	if all == (len(ids) > 0) {
-		return 0, fmt.Errorf(readyUsage)
+		return 0, errors.New(usageLine("tickets", "ready"))
 	}
 	loaded, unreadable, err := loadTickets(root)
 	if err != nil {
@@ -571,8 +560,6 @@ func ticketsReady(root string, args []string) (int, error) {
 	return 0, nil
 }
 
-const markPublishedUsage = "usage: zumen tickets mark-published <id> --external <tool>=<item-id> [--force]"
-
 // ticketsMarkPublished freezes a ticket with a PM tool's item id. It checks first,
 // and changes nothing if any check fails: the change must be in publish (which
 // --force overrides), the ticket must be validly ready or already published, and
@@ -588,14 +575,14 @@ func ticketsMarkPublished(root string, args []string) (int, error) {
 		case a == "--force":
 			force = true
 		case strings.HasPrefix(a, "-") || id != "":
-			return 0, fmt.Errorf(markPublishedUsage)
+			return 0, errors.New(usageLine("tickets", "mark-published"))
 		default:
 			id = a
 		}
 	}
 	tool, itemID, ok := strings.Cut(external, "=")
 	if id == "" || !ok {
-		return 0, fmt.Errorf(markPublishedUsage)
+		return 0, errors.New(usageLine("tickets", "mark-published"))
 	}
 	loaded, unreadable, err := loadTickets(root)
 	if err != nil {
@@ -689,7 +676,7 @@ func publishProblems(t *ticket.Ticket, tool string, byID map[string][]*ticket.Ti
 func ticketsUnfreeze(root string, args []string) (int, error) {
 	pos, reason, _, err := parseTransition(args)
 	if err != nil || len(pos) != 1 || reason == "" {
-		return 0, fmt.Errorf("usage: zumen tickets unfreeze <id> --reason <r>")
+		return 0, errors.New(usageLine("tickets", "unfreeze"))
 	}
 	t, err := findTicket(root, pos[0])
 	if err != nil {
